@@ -55,4 +55,4 @@ iCloud 可同步倒数日、分组、接口配置与使用偏好。自动备份�
 
 适用于 **iOS 17 及以上**；Apple Watch 需 **watchOS 10 及以上**，并配对安装拾刻计划的 iPhone。
 
-[作者 Chandler-Lu](https://www.yeslu.cn)
+[帮助与支持](SUPPORT.md) · [隐私政策](PRIVACY.md) · [作者 Chandler-Lu](https://www.yeslu.cn)
