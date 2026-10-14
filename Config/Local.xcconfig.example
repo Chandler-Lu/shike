@@ -1,0 +1,7 @@
+DEVELOPMENT_TEAM = YOUR_TEAM_ID
+SHIKE_BUNDLE_ID = com.yourname.shike
+SHIKE_APP_GROUP = group.com.yourname.shike
+SHIKE_KEYCHAIN_SUFFIX = com.yourname.shike.shared
+
+// Main app CloudKit private database container
+SHIKE_CLOUD_CONTAINER = iCloud.com.chandler.shike

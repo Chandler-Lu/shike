@@ -1,0 +1,1721 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 60;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		093C4F05D958637C3AE01ECD /* ImageStaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9210D5B422ADC590BAE7E008 /* ImageStaging.swift */; };
+		0CB243B96F0305AC007E8C9C /* CountdownSnapshotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */; };
+		0DB3267B14B180113B1F7A25 /* NotebookTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A580151B2E3FF59BCF6F964 /* NotebookTheme.swift */; };
+		0F18B5F59E9BAF2BF78D2962 /* ShikeWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = 64541B1C2F8F49BB75B51FDE /* ShikeWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		1106545233A72373EB2EDC27 /* CountdownConnectivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3901532735051F67F822F909 /* CountdownConnectivity.swift */; };
+		11CCB7DC7F011B0F293E0033 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 135B69D6400C5EB631EA0004 /* Foundation.framework */; };
+		1520F82D88050529A15226A3 /* ShikeWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = AC8B7BDD9E5C8C2EF4B1D7B6 /* ShikeWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		159D1D60C9D6C723FD0EC458 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1445B5BD0CA1CD5DEDD3A78 /* ShareViewController.swift */; };
+		15DAA7BD34CE209D38337269 /* ShikeWatchWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 5E0D6E3070D4E21F87DA62C7 /* ShikeWatchWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		17A2B571BF5AC85C2DD4E6CD /* Shared/UI/PrivacyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D9B1EB9E0BB6C4B2FE43D1A /* Shared/UI/PrivacyViews.swift */; };
+		18BB3956690E9A38CED769BF /* CountdownWidgetContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6B417D850E3FBFF817EB3D /* CountdownWidgetContent.swift */; };
+		1B5269F135A457053F0FF1E5 /* CountdownSnapshotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */; };
+		1E0BF12DFCBA964AEBADC415 /* ItemLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59FE8E7DBF9D7CB54838E7E8 /* ItemLoader.swift */; };
+		21E5D77032A0E363F7CD9E9E /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 135B69D6400C5EB631EA0004 /* Foundation.framework */; };
+		22910F6BC281C97FA2C9E4BB /* CompanionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C3310553A08C141D9A2DE0 /* CompanionViews.swift */; };
+		25DFC2E9182FA16FF3327939 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0217491DECBC44F5AE196A36 /* OFL.txt */; };
+		2B3889D467909E0582F03C5F /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D39E93B5880F9297AC46C7 /* CalendarService.swift */; };
+		2C7417559FDFFC5D74AD4135 /* ImportController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED79057B549841B05F06A368 /* ImportController.swift */; };
+		2EEC362981512BA0ED413D62 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B4F7D3B137A3502C5AEEE24D /* PrivacyInfo.xcprivacy */; };
+		330C2A105506F42FDF6F9EDD /* ShikeApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E98FE899B5A21F2F162226D /* ShikeApp.swift */; };
+		34F59FC14CCF2D17873B4FFD /* Shared/Services/PrivacyConsent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E181803BEE22B8DE18B47AD /* Shared/Services/PrivacyConsent.swift */; };
+		38ECDB56B0C51DB0EA074C40 /* DataBackupService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3AEC0126213C400238572164 /* DataBackupService.swift */; };
+		3A82C170920286DBECD42A11 /* ShikeCore in Frameworks */ = {isa = PBXBuildFile; productRef = D1F722A5D6EB85C6DC71CDDA /* ShikeCore */; };
+		3CCDABC9C300599837B7FEB6 /* ShikeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 712315AD433DE1F47C2F73E8 /* ShikeCore */; };
+		4043B12F2D0FC3D29FA1B856 /* ShikeCore in Frameworks */ = {isa = PBXBuildFile; productRef = B6A444CFB89A5ACA8A3D4753 /* ShikeCore */; };
+		424A73ED6AFFA71C2EA665C9 /* CountdownNotifications.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1CDB142F23B64BF91E8F5289 /* CountdownNotifications.swift */; };
+		450337C5967DC8BEC45322EC /* ImportFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3930148D3113806292EABE /* ImportFlowView.swift */; };
+		45A2676220362530D2FFF15B /* ShikeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 71D17EA20ED2A809CBE06694 /* ShikeCore */; };
+		48AD36A022F100A67C9F4007 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 135B69D6400C5EB631EA0004 /* Foundation.framework */; };
+		4B39F5ED546F99A4C474787F /* ShikeShare.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9FE7626C3E5CA7673B2D8045 /* ShikeShare.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		4B6F65406C274427B8D6FA14 /* CountdownStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864A76AEC80F82752730F173 /* CountdownStore.swift */; };
+		4CB823A2E4B388A316D8054E /* Storage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA29B45F8355629DCB225497 /* Storage.swift */; };
+		4D14A535B240FF205486DF09 /* QuickImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = F5AD58D9A11687542A3D00E8 /* QuickImport.swift */; };
+		4E8593062D013D4ABB084487 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0217491DECBC44F5AE196A36 /* OFL.txt */; };
+		4E86DCFAAE4DF7663679A5DE /* CountdownWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B855AAAF2B3D7890367CD2 /* CountdownWidget.swift */; };
+		52836B8EE218C767CC273D53 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD37A6EB9A5AD5678408071 /* OCRService.swift */; };
+		55E27A0084602964CC7F80FF /* NativeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BBEAC131DDD842EF8171AC /* NativeServiceTests.swift */; };
+		5AC938C9D0F673B1A2FE603A /* ImageStaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9210D5B422ADC590BAE7E008 /* ImageStaging.swift */; };
+		5B5015BACFF1F402A299960B /* CompanionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C3310553A08C141D9A2DE0 /* CompanionViews.swift */; };
+		5CCF7DD5F25497075B9A462D /* ImportController.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED79057B549841B05F06A368 /* ImportController.swift */; };
+		5DC3AC2D92AD72C0893FE6D8 /* ShikeUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F58F13DF689FB3400313925F /* ShikeUITests.swift */; };
+		5DF6070A514775D24E7580E3 /* CompanionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C3310553A08C141D9A2DE0 /* CompanionViews.swift */; };
+		60027943A8AE55CD667680CA /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD37A6EB9A5AD5678408071 /* OCRService.swift */; };
+		614E286BE0125F4E2D898803 /* Tests/CountdownServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6498C90E52475330B4E1C19A /* Tests/CountdownServiceTests.swift */; };
+		633F08F923602382F00A3EA3 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B4F7D3B137A3502C5AEEE24D /* PrivacyInfo.xcprivacy */; };
+		63DD82E2A7C49019D91AF6B0 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB1542D8B9E46FB6625E508C /* Foundation.framework */; };
+		642417C696C62988E441D011 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB1542D8B9E46FB6625E508C /* Foundation.framework */; };
+		65B12E61395AB5E3E756C603 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B4F7D3B137A3502C5AEEE24D /* PrivacyInfo.xcprivacy */; };
+		67E8DBACE86398B4AD33CE69 /* CalendarService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B6D39E93B5880F9297AC46C7 /* CalendarService.swift */; };
+		6AE7F18DF1FBB682FC506627 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B4F7D3B137A3502C5AEEE24D /* PrivacyInfo.xcprivacy */; };
+		6BC0C0EE8FB557B219CE2874 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A95BDB51204AF994F70CD0B6 /* Assets.xcassets */; };
+		6F09CB626886E6F700AF974E /* LXGWWenKai-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2E5052A700374930F5439391 /* LXGWWenKai-Regular.ttf */; };
+		7084B413D37A7E5335993997 /* ImportFlowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8A3930148D3113806292EABE /* ImportFlowView.swift */; };
+		7682814245A13494948EB0CB /* CountdownCompanionPublisher.swift in Sources */ = {isa = PBXBuildFile; fileRef = 580D155C3B216207BAE781BB /* CountdownCompanionPublisher.swift */; };
+		76C896A15FE1FA94617FB1E5 /* LXGWWenKai-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2E5052A700374930F5439391 /* LXGWWenKai-Regular.ttf */; };
+		7A0E18DC79725F4C51B443EC /* DraftEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 080E1AD9F2C7EE19218372A1 /* DraftEditor.swift */; };
+		7B6A72982D9AE824BB13FE68 /* CountdownSnapshotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */; };
+		81E31D14B67E5146B07AB310 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A8D2E73139AF968E741B1B /* RootView.swift */; };
+		8A16A2368D9A62C9F5A66E2F /* ShikeWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08ACA3A8D6923D5233F159B9 /* ShikeWatchApp.swift */; };
+		8CB0951235BA4A09F11F82E6 /* Shared/UI/PrivacyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D9B1EB9E0BB6C4B2FE43D1A /* Shared/UI/PrivacyViews.swift */; };
+		8FF526206B9FB047A4E7ED47 /* Storage.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA29B45F8355629DCB225497 /* Storage.swift */; };
+		90B42EEBDBA7D7A05BCD63EB /* CountdownWidgetContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6B417D850E3FBFF817EB3D /* CountdownWidgetContent.swift */; };
+		93DED708C42B0A9BD8D00DA4 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9260F7A5FB818A8B54C5CF64 /* HistoryView.swift */; };
+		93FD465A3055C3F6451A6FFE /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 135B69D6400C5EB631EA0004 /* Foundation.framework */; };
+		946B849D7CF9BF83E3660527 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = CB1542D8B9E46FB6625E508C /* Foundation.framework */; };
+		953324A34FB05D495ADE135B /* PlanningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5877F0C5B429C00ADF26BEC3 /* PlanningView.swift */; };
+		95B7631A0A6CDBDCF2BC7363 /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 135B69D6400C5EB631EA0004 /* Foundation.framework */; };
+		9A6CBB81AA7174608E00EED7 /* NotebookTheme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A580151B2E3FF59BCF6F964 /* NotebookTheme.swift */; };
+		9B185726134AFC72E3D90D1A /* ShikeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 4E49126B3EC3C529E851A59C /* ShikeCore */; };
+		9BF071833D00A00F29709226 /* CountdownWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B855AAAF2B3D7890367CD2 /* CountdownWidget.swift */; };
+		9C093024A8553AA4FAB74186 /* App/CloudSyncFailure.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C4AE6E0A18F106276B42CED /* App/CloudSyncFailure.swift */; };
+		A0376D069B98145E8A13AAB3 /* LXGWWenKai-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2E5052A700374930F5439391 /* LXGWWenKai-Regular.ttf */; };
+		A35DB7DF0DAE125EFE17C962 /* CompanionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C3310553A08C141D9A2DE0 /* CompanionViews.swift */; };
+		A396366E9D1872A1F010679B /* CountdownNavigation.swift in Sources */ = {isa = PBXBuildFile; fileRef = F84CC6F3E5A344CC8BC84273 /* CountdownNavigation.swift */; };
+		A6C50E9A770535138B5BB66F /* CountdownConnectivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3901532735051F67F822F909 /* CountdownConnectivity.swift */; };
+		A71C8878109211EFB5AE0001 /* App/CountdownNaturalLanguage.swift in Sources */ = {isa = PBXBuildFile; fileRef = A71C8878109211EFB5AE0002 /* App/CountdownNaturalLanguage.swift */; };
+		A7C1B1D956F88417DF8571C6 /* Shared/Resources/PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = DC596BC5B2AE7837C12CD861 /* Shared/Resources/PrivacyPolicy.txt */; };
+		A91110B179DB9BE43EEE0225 /* CountdownWidgetContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6B417D850E3FBFF817EB3D /* CountdownWidgetContent.swift */; };
+		A986384BFC33A14DBF8B1C8F /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0217491DECBC44F5AE196A36 /* OFL.txt */; };
+		AA45B44D255CCBE253181D82 /* ShikeWatchUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9455CB6DEDCAEE8758369E41 /* ShikeWatchUITests.swift */; };
+		AA5379EA7A3065E1241F80B7 /* CountdownSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = A56F0664E925E919BC129FA9 /* CountdownSync.swift */; };
+		AA873517AE5FDE4C24A89DAB /* ItemLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59FE8E7DBF9D7CB54838E7E8 /* ItemLoader.swift */; };
+		AD6F089748910C991A28AF87 /* Shared/Services/PrivacyConsent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5E181803BEE22B8DE18B47AD /* Shared/Services/PrivacyConsent.swift */; };
+		B099D78DC202218C5B9B466D /* CalendarView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2E4CDD2DD28AC51D678F4BF /* CalendarView.swift */; };
+		B5AFC07069A36F7124AEE8C5 /* DataExportView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9BA4E787AB89C83B9EC51DCE /* DataExportView.swift */; };
+		B8F53121C4E33704A086AB1D /* Shared/Resources/PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = DC596BC5B2AE7837C12CD861 /* Shared/Resources/PrivacyPolicy.txt */; };
+		BCFF0CA465CBF95CA6B27003 /* CountdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2939D6B3476533044C1665EF /* CountdownView.swift */; };
+		C7DA600E777F905475C34C20 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0217491DECBC44F5AE196A36 /* OFL.txt */; };
+		CB04144C4EFB90757B3D7389 /* DraftEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 080E1AD9F2C7EE19218372A1 /* DraftEditor.swift */; };
+		D02832EC7D41B3A5C4F07E9F /* ShikeCore in Frameworks */ = {isa = PBXBuildFile; productRef = 96297E68DA3F18907886824E /* ShikeCore */; };
+		D36834B0E76AD3AC4DD5BC0A /* LXGWWenKai-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2E5052A700374930F5439391 /* LXGWWenKai-Regular.ttf */; };
+		D46088303A4E7C59F8DACE44 /* CountdownSnapshotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */; };
+		D604F0F980E49A7769FDD287 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = B4F7D3B137A3502C5AEEE24D /* PrivacyInfo.xcprivacy */; };
+		DA9433E5B7FC65CAD9E43608 /* CompanionBackupTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A918812E45D3F4DEA50FAB8 /* CompanionBackupTests.swift */; };
+		DE972E9E9BE9F457B4F33C4A /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A7CCFE931A3B8E46F203058 /* SettingsView.swift */; };
+		E6D779508412F9891BBC4DE2 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 77E9324E10930DCE736ECB13 /* Assets.xcassets */; };
+		F08FD986766C55F9E749E930 /* LXGWWenKai-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = 2E5052A700374930F5439391 /* LXGWWenKai-Regular.ttf */; };
+		F5642F9A9EFA9AC8F933D9A7 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0217491DECBC44F5AE196A36 /* OFL.txt */; };
+		F6153D5C6356CEB705360843 /* PlanningView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5877F0C5B429C00ADF26BEC3 /* PlanningView.swift */; };
+		F666D87EB281C64E4D87674B /* ShareFixtureSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1A0A2DB5757C0E946BC5724 /* ShareFixtureSheet.swift */; };
+		F86AFE7502B42F0D935A919C /* ImportAdapters.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2062BDA7945DA98A7292DD48 /* ImportAdapters.swift */; };
+		FA0E76429AD8062F94381A41 /* CountdownStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 864A76AEC80F82752730F173 /* CountdownStore.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		015D3AF355E00F9C1A05AE1C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3C399D48FD9119C69D6B837 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 97951743173391C20BDB2747;
+			remoteInfo = ShikeWidgets;
+		};
+		36CB9FE43F00B094BE5A6B2C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3C399D48FD9119C69D6B837 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E27DB9AF853A38DFB84F3E88;
+			remoteInfo = Shike;
+		};
+		3EBC241C77B8BED7519E13C9 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3C399D48FD9119C69D6B837 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E27DB9AF853A38DFB84F3E88;
+			remoteInfo = Shike;
+		};
+		8164438D711013B46CBCE731 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3C399D48FD9119C69D6B837 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7A4BB040B79970A6115537A7;
+			remoteInfo = ShikeWatchWidgets;
+		};
+		92C04D1D58AB6BE47667F9C5 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3C399D48FD9119C69D6B837 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A68F377F4267D45D31DE450;
+			remoteInfo = ShikeWatch;
+		};
+		A4188D2ADEAF8AE5F411A5E0 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3C399D48FD9119C69D6B837 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 5A68F377F4267D45D31DE450;
+			remoteInfo = ShikeWatch;
+		};
+		BACDF91645ADFEA754D3137D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C3C399D48FD9119C69D6B837 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 7B3AC5D99E7F069246ABC141;
+			remoteInfo = ShikeShare;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		24A2659E940505FF17488269 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				15DAA7BD34CE209D38337269 /* ShikeWatchWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3BCB9112C629FCFE39586C0C /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				4B39F5ED546F99A4C474787F /* ShikeShare.appex in Embed App Extensions */,
+				1520F82D88050529A15226A3 /* ShikeWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F5D718DC1779FFE1DCB3534B /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				0F18B5F59E9BAF2BF78D2962 /* ShikeWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0217491DECBC44F5AE196A36 /* OFL.txt */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text; name = OFL.txt; path = Shared/Resources/Fonts/OFL.txt; sourceTree = "<group>"; };
+		080E1AD9F2C7EE19218372A1 /* DraftEditor.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DraftEditor.swift; path = Shared/UI/DraftEditor.swift; sourceTree = "<group>"; };
+		08ACA3A8D6923D5233F159B9 /* ShikeWatchApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShikeWatchApp.swift; path = WatchApp/ShikeWatchApp.swift; sourceTree = "<group>"; };
+		0A580151B2E3FF59BCF6F964 /* NotebookTheme.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NotebookTheme.swift; path = Shared/UI/NotebookTheme.swift; sourceTree = "<group>"; };
+		101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = Shared.xcconfig; path = Config/Shared.xcconfig; sourceTree = "<group>"; };
+		135B69D6400C5EB631EA0004 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		1CDB142F23B64BF91E8F5289 /* CountdownNotifications.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CountdownNotifications.swift; path = App/CountdownNotifications.swift; sourceTree = "<group>"; };
+		1D9B1EB9E0BB6C4B2FE43D1A /* Shared/UI/PrivacyViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/UI/PrivacyViews.swift; sourceTree = "<group>"; };
+		1F920AFB2F4711D781B5EACD /* ShikeWatchUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShikeWatchUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		2062BDA7945DA98A7292DD48 /* ImportAdapters.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ImportAdapters.swift; path = App/ImportAdapters.swift; sourceTree = "<group>"; };
+		2939D6B3476533044C1665EF /* CountdownView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CountdownView.swift; path = App/CountdownView.swift; sourceTree = "<group>"; };
+		2E5052A700374930F5439391 /* LXGWWenKai-Regular.ttf */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file; name = "LXGWWenKai-Regular.ttf"; path = "Shared/Resources/Fonts/LXGWWenKai-Regular.ttf"; sourceTree = "<group>"; };
+		35C3310553A08C141D9A2DE0 /* CompanionViews.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CompanionViews.swift; path = Shared/CountdownCompanion/CompanionViews.swift; sourceTree = "<group>"; };
+		3901532735051F67F822F909 /* CountdownConnectivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CountdownConnectivity.swift; path = Shared/CountdownCompanion/CountdownConnectivity.swift; sourceTree = "<group>"; };
+		3AEC0126213C400238572164 /* DataBackupService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = DataBackupService.swift; path = App/DataBackupService.swift; sourceTree = "<group>"; };
+		4E98FE899B5A21F2F162226D /* ShikeApp.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShikeApp.swift; path = App/ShikeApp.swift; sourceTree = "<group>"; };
+		580D155C3B216207BAE781BB /* CountdownCompanionPublisher.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CountdownCompanionPublisher.swift; path = App/CountdownCompanionPublisher.swift; sourceTree = "<group>"; };
+		5877F0C5B429C00ADF26BEC3 /* PlanningView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PlanningView.swift; path = Shared/UI/PlanningView.swift; sourceTree = "<group>"; };
+		59FE8E7DBF9D7CB54838E7E8 /* ItemLoader.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ItemLoader.swift; path = Shared/Services/ItemLoader.swift; sourceTree = "<group>"; };
+		5E0D6E3070D4E21F87DA62C7 /* ShikeWatchWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShikeWatchWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		5E181803BEE22B8DE18B47AD /* Shared/Services/PrivacyConsent.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Shared/Services/PrivacyConsent.swift; sourceTree = "<group>"; };
+		64541B1C2F8F49BB75B51FDE /* ShikeWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ShikeWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		6498C90E52475330B4E1C19A /* Tests/CountdownServiceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/CountdownServiceTests.swift; sourceTree = "<group>"; };
+		6A918812E45D3F4DEA50FAB8 /* CompanionBackupTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CompanionBackupTests.swift; path = Tests/CompanionBackupTests.swift; sourceTree = "<group>"; };
+		6C4AE6E0A18F106276B42CED /* App/CloudSyncFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/CloudSyncFailure.swift; sourceTree = "<group>"; };
+		71BBEAC131DDD842EF8171AC /* NativeServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeServiceTests.swift; path = Tests/NativeServiceTests.swift; sourceTree = "<group>"; };
+		77E9324E10930DCE736ECB13 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = App/Assets.xcassets; sourceTree = "<group>"; };
+		864A76AEC80F82752730F173 /* CountdownStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CountdownStore.swift; path = Shared/Services/CountdownStore.swift; sourceTree = "<group>"; };
+		88A8D2E73139AF968E741B1B /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = App/RootView.swift; sourceTree = "<group>"; };
+		8A3930148D3113806292EABE /* ImportFlowView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ImportFlowView.swift; path = Shared/UI/ImportFlowView.swift; sourceTree = "<group>"; };
+		8F6B417D850E3FBFF817EB3D /* CountdownWidgetContent.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CountdownWidgetContent.swift; path = CountdownWidgets/CountdownWidgetContent.swift; sourceTree = "<group>"; };
+		9210D5B422ADC590BAE7E008 /* ImageStaging.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ImageStaging.swift; path = Shared/Services/ImageStaging.swift; sourceTree = "<group>"; };
+		9260F7A5FB818A8B54C5CF64 /* HistoryView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = HistoryView.swift; path = App/HistoryView.swift; sourceTree = "<group>"; };
+		9455CB6DEDCAEE8758369E41 /* ShikeWatchUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShikeWatchUITests.swift; path = WatchUITests/ShikeWatchUITests.swift; sourceTree = "<group>"; };
+		9A7CCFE931A3B8E46F203058 /* SettingsView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = SettingsView.swift; path = App/SettingsView.swift; sourceTree = "<group>"; };
+		9BA4E787AB89C83B9EC51DCE /* DataExportView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = DataExportView.swift; path = App/DataExportView.swift; sourceTree = "<group>"; };
+		9CD37A6EB9A5AD5678408071 /* OCRService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = OCRService.swift; path = Shared/Services/OCRService.swift; sourceTree = "<group>"; };
+		9CD7209034EEF5017859D275 /* ShikeUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShikeUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		9FE7626C3E5CA7673B2D8045 /* ShikeShare.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShikeShare.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A1445B5BD0CA1CD5DEDD3A78 /* ShareViewController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShareViewController.swift; path = ShareExtension/ShareViewController.swift; sourceTree = "<group>"; };
+		A56F0664E925E919BC129FA9 /* CountdownSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CountdownSync.swift; path = App/CountdownSync.swift; sourceTree = "<group>"; };
+		A71C8878109211EFB5AE0002 /* App/CountdownNaturalLanguage.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/CountdownNaturalLanguage.swift; sourceTree = "<group>"; };
+		A95BDB51204AF994F70CD0B6 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = WatchApp/Assets.xcassets; sourceTree = "<group>"; };
+		AC8B7BDD9E5C8C2EF4B1D7B6 /* ShikeWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShikeWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CountdownSnapshotStorage.swift; path = Shared/CountdownCompanion/CountdownSnapshotStorage.swift; sourceTree = "<group>"; };
+		B179F4711DED74DE29F2705E /* ShikeTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ShikeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		B4F7D3B137A3502C5AEEE24D /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xml; name = PrivacyInfo.xcprivacy; path = Shared/Resources/PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		B6D39E93B5880F9297AC46C7 /* CalendarService.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CalendarService.swift; path = Shared/Services/CalendarService.swift; sourceTree = "<group>"; };
+		BB7E0FD941F7337906718126 /* Shike.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Shike.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		CB1542D8B9E46FB6625E508C /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/WatchOS.platform/Developer/SDKs/WatchOS26.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		D1A0A2DB5757C0E946BC5724 /* ShareFixtureSheet.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShareFixtureSheet.swift; path = App/ShareFixtureSheet.swift; sourceTree = "<group>"; };
+		D7B855AAAF2B3D7890367CD2 /* CountdownWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CountdownWidget.swift; path = CountdownWidgets/CountdownWidget.swift; sourceTree = "<group>"; };
+		DC596BC5B2AE7837C12CD861 /* Shared/Resources/PrivacyPolicy.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Shared/Resources/PrivacyPolicy.txt; sourceTree = "<group>"; };
+		ED79057B549841B05F06A368 /* ImportController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ImportController.swift; path = Shared/Services/ImportController.swift; sourceTree = "<group>"; };
+		F2E4CDD2DD28AC51D678F4BF /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarView.swift; path = App/CalendarView.swift; sourceTree = "<group>"; };
+		F58F13DF689FB3400313925F /* ShikeUITests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ShikeUITests.swift; path = UITests/ShikeUITests.swift; sourceTree = "<group>"; };
+		F5AD58D9A11687542A3D00E8 /* QuickImport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = QuickImport.swift; path = App/QuickImport.swift; sourceTree = "<group>"; };
+		F84CC6F3E5A344CC8BC84273 /* CountdownNavigation.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CountdownNavigation.swift; path = App/CountdownNavigation.swift; sourceTree = "<group>"; };
+		FA29B45F8355629DCB225497 /* Storage.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = Storage.swift; path = Shared/Services/Storage.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		2BE20B076C172BA87B3396E7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				946B849D7CF9BF83E3660527 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6831B475BA48BFF6B3AFB424 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				63DD82E2A7C49019D91AF6B0 /* Foundation.framework in Frameworks */,
+				4043B12F2D0FC3D29FA1B856 /* ShikeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		982F8DE1AF97A5A78E5AA0A2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				95B7631A0A6CDBDCF2BC7363 /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		987D755622702DC2D5D449CA /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				642417C696C62988E441D011 /* Foundation.framework in Frameworks */,
+				9B185726134AFC72E3D90D1A /* ShikeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9CFB5DFA9ECB3539CE4121A3 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				11CCB7DC7F011B0F293E0033 /* Foundation.framework in Frameworks */,
+				45A2676220362530D2FFF15B /* ShikeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BB3E8925CB1A4F3909C5E385 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				93FD465A3055C3F6451A6FFE /* Foundation.framework in Frameworks */,
+				D02832EC7D41B3A5C4F07E9F /* ShikeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D572ACD1B7268AC9418DBEAF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				48AD36A022F100A67C9F4007 /* Foundation.framework in Frameworks */,
+				3CCDABC9C300599837B7FEB6 /* ShikeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DF9544734949DB26338091D2 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				21E5D77032A0E363F7CD9E9E /* Foundation.framework in Frameworks */,
+				3A82C170920286DBECD42A11 /* ShikeCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3D1C2DCF7BB3FD4121DD99D1 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				6C4AE6E0A18F106276B42CED /* App/CloudSyncFailure.swift */,
+				6498C90E52475330B4E1C19A /* Tests/CountdownServiceTests.swift */,
+				9BA4E787AB89C83B9EC51DCE /* DataExportView.swift */,
+				2939D6B3476533044C1665EF /* CountdownView.swift */,
+				A71C8878109211EFB5AE0002 /* App/CountdownNaturalLanguage.swift */,
+				1CDB142F23B64BF91E8F5289 /* CountdownNotifications.swift */,
+				A56F0664E925E919BC129FA9 /* CountdownSync.swift */,
+				864A76AEC80F82752730F173 /* CountdownStore.swift */,
+				F5AD58D9A11687542A3D00E8 /* QuickImport.swift */,
+				F2E4CDD2DD28AC51D678F4BF /* CalendarView.swift */,
+				5877F0C5B429C00ADF26BEC3 /* PlanningView.swift */,
+				135B69D6400C5EB631EA0004 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		47A32717D4C221BE47462534 = {
+			isa = PBXGroup;
+			children = (
+				7786B1EB04ECB7E01C217B8F /* Products */,
+				A1C507C931B6D4782298751C /* Frameworks */,
+				101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */,
+				DC596BC5B2AE7837C12CD861 /* Shared/Resources/PrivacyPolicy.txt */,
+				1D9B1EB9E0BB6C4B2FE43D1A /* Shared/UI/PrivacyViews.swift */,
+				5E181803BEE22B8DE18B47AD /* Shared/Services/PrivacyConsent.swift */,
+				9260F7A5FB818A8B54C5CF64 /* HistoryView.swift */,
+				2062BDA7945DA98A7292DD48 /* ImportAdapters.swift */,
+				88A8D2E73139AF968E741B1B /* RootView.swift */,
+				9A7CCFE931A3B8E46F203058 /* SettingsView.swift */,
+				D1A0A2DB5757C0E946BC5724 /* ShareFixtureSheet.swift */,
+				4E98FE899B5A21F2F162226D /* ShikeApp.swift */,
+				A1445B5BD0CA1CD5DEDD3A78 /* ShareViewController.swift */,
+				B6D39E93B5880F9297AC46C7 /* CalendarService.swift */,
+				9210D5B422ADC590BAE7E008 /* ImageStaging.swift */,
+				ED79057B549841B05F06A368 /* ImportController.swift */,
+				59FE8E7DBF9D7CB54838E7E8 /* ItemLoader.swift */,
+				9CD37A6EB9A5AD5678408071 /* OCRService.swift */,
+				FA29B45F8355629DCB225497 /* Storage.swift */,
+				080E1AD9F2C7EE19218372A1 /* DraftEditor.swift */,
+				8A3930148D3113806292EABE /* ImportFlowView.swift */,
+				0A580151B2E3FF59BCF6F964 /* NotebookTheme.swift */,
+				71BBEAC131DDD842EF8171AC /* NativeServiceTests.swift */,
+				F58F13DF689FB3400313925F /* ShikeUITests.swift */,
+				2E5052A700374930F5439391 /* LXGWWenKai-Regular.ttf */,
+				0217491DECBC44F5AE196A36 /* OFL.txt */,
+				B4F7D3B137A3502C5AEEE24D /* PrivacyInfo.xcprivacy */,
+				77E9324E10930DCE736ECB13 /* Assets.xcassets */,
+				AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */,
+				35C3310553A08C141D9A2DE0 /* CompanionViews.swift */,
+				D7B855AAAF2B3D7890367CD2 /* CountdownWidget.swift */,
+				3901532735051F67F822F909 /* CountdownConnectivity.swift */,
+				08ACA3A8D6923D5233F159B9 /* ShikeWatchApp.swift */,
+				A95BDB51204AF994F70CD0B6 /* Assets.xcassets */,
+				580D155C3B216207BAE781BB /* CountdownCompanionPublisher.swift */,
+				F84CC6F3E5A344CC8BC84273 /* CountdownNavigation.swift */,
+				8F6B417D850E3FBFF817EB3D /* CountdownWidgetContent.swift */,
+				3AEC0126213C400238572164 /* DataBackupService.swift */,
+				6A918812E45D3F4DEA50FAB8 /* CompanionBackupTests.swift */,
+				9455CB6DEDCAEE8758369E41 /* ShikeWatchUITests.swift */,
+			);
+			sourceTree = "<group>";
+		};
+		53D477C2E7C763A2AD35F04B /* watchOS */ = {
+			isa = PBXGroup;
+			children = (
+				CB1542D8B9E46FB6625E508C /* Foundation.framework */,
+			);
+			name = watchOS;
+			sourceTree = "<group>";
+		};
+		7786B1EB04ECB7E01C217B8F /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				BB7E0FD941F7337906718126 /* Shike.app */,
+				9FE7626C3E5CA7673B2D8045 /* ShikeShare.appex */,
+				B179F4711DED74DE29F2705E /* ShikeTests.xctest */,
+				9CD7209034EEF5017859D275 /* ShikeUITests.xctest */,
+				AC8B7BDD9E5C8C2EF4B1D7B6 /* ShikeWidgets.appex */,
+				64541B1C2F8F49BB75B51FDE /* ShikeWatch.app */,
+				5E0D6E3070D4E21F87DA62C7 /* ShikeWatchWidgets.appex */,
+				1F920AFB2F4711D781B5EACD /* ShikeWatchUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		A1C507C931B6D4782298751C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				3D1C2DCF7BB3FD4121DD99D1 /* iOS */,
+				53D477C2E7C763A2AD35F04B /* watchOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		066BABE17125089265372D09 /* ShikeTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 673F4A39DF40EE28BFA818A4 /* Build configuration list for PBXNativeTarget "ShikeTests" */;
+			buildPhases = (
+				5BFF72F24B81D818AA552CD8 /* Sources */,
+				9CFB5DFA9ECB3539CE4121A3 /* Frameworks */,
+				3512925A66A4E9D0D5637A6C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				81606A98BDF0E9386353B3D5 /* PBXTargetDependency */,
+			);
+			name = ShikeTests;
+			packageProductDependencies = (
+				71D17EA20ED2A809CBE06694 /* ShikeCore */,
+			);
+			productName = ShikeTests;
+			productReference = B179F4711DED74DE29F2705E /* ShikeTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		5A68F377F4267D45D31DE450 /* ShikeWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5E4EF61B6C60A78A334480F8 /* Build configuration list for PBXNativeTarget "ShikeWatch" */;
+			buildPhases = (
+				5CE681F0049EC76C23780BCE /* Sources */,
+				6831B475BA48BFF6B3AFB424 /* Frameworks */,
+				EBC0DE502D5AA87EF39F3D1E /* Resources */,
+				24A2659E940505FF17488269 /* Embed App Extensions */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				78795148F700496B75D33199 /* PBXTargetDependency */,
+			);
+			name = ShikeWatch;
+			packageProductDependencies = (
+				B6A444CFB89A5ACA8A3D4753 /* ShikeCore */,
+			);
+			productName = ShikeWatch;
+			productReference = 64541B1C2F8F49BB75B51FDE /* ShikeWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+		7A4BB040B79970A6115537A7 /* ShikeWatchWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 84C34A86AC7204BEA7F8AACE /* Build configuration list for PBXNativeTarget "ShikeWatchWidgets" */;
+			buildPhases = (
+				623228AE508B37278E44A0AF /* Sources */,
+				987D755622702DC2D5D449CA /* Frameworks */,
+				0085DA5B445E0CB5E1DAC946 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShikeWatchWidgets;
+			packageProductDependencies = (
+				4E49126B3EC3C529E851A59C /* ShikeCore */,
+			);
+			productName = ShikeWatchWidgets;
+			productReference = 5E0D6E3070D4E21F87DA62C7 /* ShikeWatchWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		7B3AC5D99E7F069246ABC141 /* ShikeShare */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B57BE690D76EFBBA9071BA58 /* Build configuration list for PBXNativeTarget "ShikeShare" */;
+			buildPhases = (
+				5D951F31AA436CAC0AE6D78A /* Sources */,
+				D572ACD1B7268AC9418DBEAF /* Frameworks */,
+				C9EFE4AD066930B6F04E3F13 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShikeShare;
+			packageProductDependencies = (
+				712315AD433DE1F47C2F73E8 /* ShikeCore */,
+			);
+			productName = ShikeShare;
+			productReference = 9FE7626C3E5CA7673B2D8045 /* ShikeShare.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		97951743173391C20BDB2747 /* ShikeWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 802ED7784684E09A1AAB4100 /* Build configuration list for PBXNativeTarget "ShikeWidgets" */;
+			buildPhases = (
+				C29EED96B15C2758CCC0974D /* Sources */,
+				BB3E8925CB1A4F3909C5E385 /* Frameworks */,
+				E916D5D78E70AAA89A9AC13C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ShikeWidgets;
+			packageProductDependencies = (
+				96297E68DA3F18907886824E /* ShikeCore */,
+			);
+			productName = ShikeWidgets;
+			productReference = AC8B7BDD9E5C8C2EF4B1D7B6 /* ShikeWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		DB5152FD59240B2C6D862C75 /* ShikeWatchUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1D37A534103CCC039733650D /* Build configuration list for PBXNativeTarget "ShikeWatchUITests" */;
+			buildPhases = (
+				06B0295D4BC77F5503223CBF /* Sources */,
+				2BE20B076C172BA87B3396E7 /* Frameworks */,
+				4D02BC2EC7D55CDC5CE32FE9 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				4DEF0AC357AD83D8EF71D12E /* PBXTargetDependency */,
+			);
+			name = ShikeWatchUITests;
+			productName = ShikeWatchUITests;
+			productReference = 1F920AFB2F4711D781B5EACD /* ShikeWatchUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		E27DB9AF853A38DFB84F3E88 /* Shike */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = EA92339CCC89605F8B5F7054 /* Build configuration list for PBXNativeTarget "Shike" */;
+			buildPhases = (
+				73405DF070ED4C3154129717 /* Sources */,
+				DF9544734949DB26338091D2 /* Frameworks */,
+				B1355BAEDAB2665485F40280 /* Resources */,
+				3BCB9112C629FCFE39586C0C /* Embed App Extensions */,
+				F5D718DC1779FFE1DCB3534B /* Embed Watch Content */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3957E6EBCA3D82C44F7533ED /* PBXTargetDependency */,
+				FA505CE45570907B3A9DB0EA /* PBXTargetDependency */,
+				4A8CF650C0AF075027349862 /* PBXTargetDependency */,
+			);
+			name = Shike;
+			packageProductDependencies = (
+				D1F722A5D6EB85C6DC71CDDA /* ShikeCore */,
+			);
+			productName = Shike;
+			productReference = BB7E0FD941F7337906718126 /* Shike.app */;
+			productType = "com.apple.product-type.application";
+		};
+		F69B245357816077CE7DAD8C /* ShikeUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB61C0FB8CA54B61BC743348 /* Build configuration list for PBXNativeTarget "ShikeUITests" */;
+			buildPhases = (
+				B79D0B825C29121271669BF9 /* Sources */,
+				982F8DE1AF97A5A78E5AA0A2 /* Frameworks */,
+				ED822880F837083991EB180A /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				F9B91B7775B2D2AAAF57AF70 /* PBXTargetDependency */,
+			);
+			name = ShikeUITests;
+			productName = ShikeUITests;
+			productReference = 9CD7209034EEF5017859D275 /* ShikeUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C3C399D48FD9119C69D6B837 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 2700;
+				TargetAttributes = {
+					5A68F377F4267D45D31DE450 = {
+						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
+					};
+					7A4BB040B79970A6115537A7 = {
+						DevelopmentTeam = V7SF8825HD;
+						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
+					};
+					7B3AC5D99E7F069246ABC141 = {
+						SystemCapabilities = {
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
+					};
+					97951743173391C20BDB2747 = {
+						DevelopmentTeam = V7SF8825HD;
+						ProvisioningStyle = Automatic;
+						SystemCapabilities = {
+							com.apple.ApplicationGroups.iOS = {
+								enabled = 1;
+							};
+						};
+					};
+					E27DB9AF853A38DFB84F3E88 = {
+						SystemCapabilities = {
+							com.apple.BackgroundModes = {
+								enabled = 1;
+							};
+							com.apple.Push = {
+								enabled = 1;
+							};
+							com.apple.iCloud = {
+								enabled = 1;
+							};
+						};
+					};
+				};
+			};
+			buildConfigurationList = 7AE8BC8E05927CDCEB5661E9 /* Build configuration list for PBXProject "Shike" */;
+			compatibilityVersion = "Xcode 3.2";
+			developmentRegion = "zh-Hans";
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				"zh-Hans",
+				en,
+				Base,
+			);
+			mainGroup = 47A32717D4C221BE47462534;
+			packageReferences = (
+				7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */,
+			);
+			productRefGroup = 7786B1EB04ECB7E01C217B8F /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				E27DB9AF853A38DFB84F3E88 /* Shike */,
+				7B3AC5D99E7F069246ABC141 /* ShikeShare */,
+				066BABE17125089265372D09 /* ShikeTests */,
+				F69B245357816077CE7DAD8C /* ShikeUITests */,
+				97951743173391C20BDB2747 /* ShikeWidgets */,
+				5A68F377F4267D45D31DE450 /* ShikeWatch */,
+				7A4BB040B79970A6115537A7 /* ShikeWatchWidgets */,
+				DB5152FD59240B2C6D862C75 /* ShikeWatchUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		0085DA5B445E0CB5E1DAC946 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				633F08F923602382F00A3EA3 /* PrivacyInfo.xcprivacy in Resources */,
+				A0376D069B98145E8A13AAB3 /* LXGWWenKai-Regular.ttf in Resources */,
+				C7DA600E777F905475C34C20 /* OFL.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3512925A66A4E9D0D5637A6C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		4D02BC2EC7D55CDC5CE32FE9 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B1355BAEDAB2665485F40280 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B8F53121C4E33704A086AB1D /* Shared/Resources/PrivacyPolicy.txt in Resources */,
+				F08FD986766C55F9E749E930 /* LXGWWenKai-Regular.ttf in Resources */,
+				A986384BFC33A14DBF8B1C8F /* OFL.txt in Resources */,
+				D604F0F980E49A7769FDD287 /* PrivacyInfo.xcprivacy in Resources */,
+				E6D779508412F9891BBC4DE2 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C9EFE4AD066930B6F04E3F13 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A7C1B1D956F88417DF8571C6 /* Shared/Resources/PrivacyPolicy.txt in Resources */,
+				D36834B0E76AD3AC4DD5BC0A /* LXGWWenKai-Regular.ttf in Resources */,
+				F5642F9A9EFA9AC8F933D9A7 /* OFL.txt in Resources */,
+				6AE7F18DF1FBB682FC506627 /* PrivacyInfo.xcprivacy in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E916D5D78E70AAA89A9AC13C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2EEC362981512BA0ED413D62 /* PrivacyInfo.xcprivacy in Resources */,
+				76C896A15FE1FA94617FB1E5 /* LXGWWenKai-Regular.ttf in Resources */,
+				4E8593062D013D4ABB084487 /* OFL.txt in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EBC0DE502D5AA87EF39F3D1E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				65B12E61395AB5E3E756C603 /* PrivacyInfo.xcprivacy in Resources */,
+				6F09CB626886E6F700AF974E /* LXGWWenKai-Regular.ttf in Resources */,
+				25DFC2E9182FA16FF3327939 /* OFL.txt in Resources */,
+				6BC0C0EE8FB557B219CE2874 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		ED822880F837083991EB180A /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		06B0295D4BC77F5503223CBF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AA45B44D255CCBE253181D82 /* ShikeWatchUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5BFF72F24B81D818AA552CD8 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				614E286BE0125F4E2D898803 /* Tests/CountdownServiceTests.swift in Sources */,
+				55E27A0084602964CC7F80FF /* NativeServiceTests.swift in Sources */,
+				DA9433E5B7FC65CAD9E43608 /* CompanionBackupTests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5CE681F0049EC76C23780BCE /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1B5269F135A457053F0FF1E5 /* CountdownSnapshotStorage.swift in Sources */,
+				A35DB7DF0DAE125EFE17C962 /* CompanionViews.swift in Sources */,
+				1106545233A72373EB2EDC27 /* CountdownConnectivity.swift in Sources */,
+				8A16A2368D9A62C9F5A66E2F /* ShikeWatchApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5D951F31AA436CAC0AE6D78A /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				FA0E76429AD8062F94381A41 /* CountdownStore.swift in Sources */,
+				F6153D5C6356CEB705360843 /* PlanningView.swift in Sources */,
+				8CB0951235BA4A09F11F82E6 /* Shared/UI/PrivacyViews.swift in Sources */,
+				34F59FC14CCF2D17873B4FFD /* Shared/Services/PrivacyConsent.swift in Sources */,
+				159D1D60C9D6C723FD0EC458 /* ShareViewController.swift in Sources */,
+				2B3889D467909E0582F03C5F /* CalendarService.swift in Sources */,
+				5AC938C9D0F673B1A2FE603A /* ImageStaging.swift in Sources */,
+				2C7417559FDFFC5D74AD4135 /* ImportController.swift in Sources */,
+				AA873517AE5FDE4C24A89DAB /* ItemLoader.swift in Sources */,
+				52836B8EE218C767CC273D53 /* OCRService.swift in Sources */,
+				8FF526206B9FB047A4E7ED47 /* Storage.swift in Sources */,
+				CB04144C4EFB90757B3D7389 /* DraftEditor.swift in Sources */,
+				7084B413D37A7E5335993997 /* ImportFlowView.swift in Sources */,
+				9A6CBB81AA7174608E00EED7 /* NotebookTheme.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		623228AE508B37278E44A0AF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				0CB243B96F0305AC007E8C9C /* CountdownSnapshotStorage.swift in Sources */,
+				5B5015BACFF1F402A299960B /* CompanionViews.swift in Sources */,
+				9BF071833D00A00F29709226 /* CountdownWidget.swift in Sources */,
+				18BB3956690E9A38CED769BF /* CountdownWidgetContent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		73405DF070ED4C3154129717 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9C093024A8553AA4FAB74186 /* App/CloudSyncFailure.swift in Sources */,
+				B5AFC07069A36F7124AEE8C5 /* DataExportView.swift in Sources */,
+				BCFF0CA465CBF95CA6B27003 /* CountdownView.swift in Sources */,
+				A71C8878109211EFB5AE0001 /* App/CountdownNaturalLanguage.swift in Sources */,
+				424A73ED6AFFA71C2EA665C9 /* CountdownNotifications.swift in Sources */,
+				AA5379EA7A3065E1241F80B7 /* CountdownSync.swift in Sources */,
+				4B6F65406C274427B8D6FA14 /* CountdownStore.swift in Sources */,
+				4D14A535B240FF205486DF09 /* QuickImport.swift in Sources */,
+				B099D78DC202218C5B9B466D /* CalendarView.swift in Sources */,
+				953324A34FB05D495ADE135B /* PlanningView.swift in Sources */,
+				17A2B571BF5AC85C2DD4E6CD /* Shared/UI/PrivacyViews.swift in Sources */,
+				AD6F089748910C991A28AF87 /* Shared/Services/PrivacyConsent.swift in Sources */,
+				93DED708C42B0A9BD8D00DA4 /* HistoryView.swift in Sources */,
+				F86AFE7502B42F0D935A919C /* ImportAdapters.swift in Sources */,
+				81E31D14B67E5146B07AB310 /* RootView.swift in Sources */,
+				DE972E9E9BE9F457B4F33C4A /* SettingsView.swift in Sources */,
+				F666D87EB281C64E4D87674B /* ShareFixtureSheet.swift in Sources */,
+				330C2A105506F42FDF6F9EDD /* ShikeApp.swift in Sources */,
+				67E8DBACE86398B4AD33CE69 /* CalendarService.swift in Sources */,
+				093C4F05D958637C3AE01ECD /* ImageStaging.swift in Sources */,
+				5CCF7DD5F25497075B9A462D /* ImportController.swift in Sources */,
+				1E0BF12DFCBA964AEBADC415 /* ItemLoader.swift in Sources */,
+				60027943A8AE55CD667680CA /* OCRService.swift in Sources */,
+				4CB823A2E4B388A316D8054E /* Storage.swift in Sources */,
+				7A0E18DC79725F4C51B443EC /* DraftEditor.swift in Sources */,
+				450337C5967DC8BEC45322EC /* ImportFlowView.swift in Sources */,
+				0DB3267B14B180113B1F7A25 /* NotebookTheme.swift in Sources */,
+				D46088303A4E7C59F8DACE44 /* CountdownSnapshotStorage.swift in Sources */,
+				A6C50E9A770535138B5BB66F /* CountdownConnectivity.swift in Sources */,
+				7682814245A13494948EB0CB /* CountdownCompanionPublisher.swift in Sources */,
+				A396366E9D1872A1F010679B /* CountdownNavigation.swift in Sources */,
+				A91110B179DB9BE43EEE0225 /* CountdownWidgetContent.swift in Sources */,
+				5DF6070A514775D24E7580E3 /* CompanionViews.swift in Sources */,
+				38ECDB56B0C51DB0EA074C40 /* DataBackupService.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		B79D0B825C29121271669BF9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5DC3AC2D92AD72C0893FE6D8 /* ShikeUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C29EED96B15C2758CCC0974D /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				7B6A72982D9AE824BB13FE68 /* CountdownSnapshotStorage.swift in Sources */,
+				22910F6BC281C97FA2C9E4BB /* CompanionViews.swift in Sources */,
+				4E86DCFAAE4DF7663679A5DE /* CountdownWidget.swift in Sources */,
+				90B42EEBDBA7D7A05BCD63EB /* CountdownWidgetContent.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3957E6EBCA3D82C44F7533ED /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShikeShare;
+			target = 7B3AC5D99E7F069246ABC141 /* ShikeShare */;
+			targetProxy = BACDF91645ADFEA754D3137D /* PBXContainerItemProxy */;
+		};
+		4A8CF650C0AF075027349862 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShikeWatch;
+			target = 5A68F377F4267D45D31DE450 /* ShikeWatch */;
+			targetProxy = A4188D2ADEAF8AE5F411A5E0 /* PBXContainerItemProxy */;
+		};
+		4DEF0AC357AD83D8EF71D12E /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShikeWatch;
+			target = 5A68F377F4267D45D31DE450 /* ShikeWatch */;
+			targetProxy = 92C04D1D58AB6BE47667F9C5 /* PBXContainerItemProxy */;
+		};
+		78795148F700496B75D33199 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShikeWatchWidgets;
+			target = 7A4BB040B79970A6115537A7 /* ShikeWatchWidgets */;
+			targetProxy = 8164438D711013B46CBCE731 /* PBXContainerItemProxy */;
+		};
+		81606A98BDF0E9386353B3D5 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Shike;
+			target = E27DB9AF853A38DFB84F3E88 /* Shike */;
+			targetProxy = 3EBC241C77B8BED7519E13C9 /* PBXContainerItemProxy */;
+		};
+		F9B91B7775B2D2AAAF57AF70 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Shike;
+			target = E27DB9AF853A38DFB84F3E88 /* Shike */;
+			targetProxy = 36CB9FE43F00B094BE5A6B2C /* PBXContainerItemProxy */;
+		};
+		FA505CE45570907B3A9DB0EA /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = ShikeWidgets;
+			target = 97951743173391C20BDB2747 /* ShikeWidgets */;
+			targetProxy = 015D3AF355E00F9C1A05AE1C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		052FE96EADC297DF516BF7CB /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/CountdownCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/WatchWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).watchkitapp.widgets";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.chandler.shike.watchkitapp.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		0643D5BE903C609414A7EDCF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Config/CountdownCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).widgets";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		3DA88EFB4E03AA995FE5AE3C /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = Config/CountdownCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/WatchWidget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).watchkitapp.widgets";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.chandler.shike.watchkitapp.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		4D2C2DF960D7096DA6FBDC1F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		4D36CB66DBF533B6F5227AA9 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/CountdownCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Watch-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).watchkitapp";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.chandler.shike.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		61E77C25E0F8D0F9440C4B0A /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).watchuitests";
+				SDKROOT = watchos;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = ShikeWatch;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		637AB8D4D8CA26074C812E8F /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Config/Shike.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Share-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "拾刻需要访问日历以显示和编辑日程、计算空闲时段，并保存你确认的安排。安排时仅经授权发送可用时段，不发送已有事件的标题、地点和备注。";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).share";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SHARE_EXTENSION";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		7648672E4A8230FF268D528B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Config/ShikeApp.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "拾刻需要访问日历以显示和编辑日程、计算空闲时段，并保存你确认的安排。安排时仅经授权发送可用时段，不发送已有事件的标题、地点和备注。";
+				INFOPLIST_KEY_NSCameraUsageDescription = "拍摄包含安排的图片，在设备上识别文字后整理成日程。";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将你选择导出的倒数日卡片图片保存到照片。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "选择桌面快捷操作时，读取你允许访问的最新一张图片，并在设备上识别文字。原图不会发送至模型服务。";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chandler.shike;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		9F006D41D07400E66909C34B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).watchuitests";
+				SDKROOT = watchos;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				TEST_TARGET_NAME = ShikeWatch;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Debug;
+		};
+		AC2BADB413AB51408EAC17C0 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Config/CountdownCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Widget-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).widgets";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		B3D5572D4CAE8C9590DCC7CC /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Config/Shike.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Share-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "拾刻需要访问日历以显示和编辑日程、计算空闲时段，并保存你确认的安排。安排时仅经授权发送可用时段，不发送已有事件的标题、地点和备注。";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).share";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.share;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) SHARE_EXTENSION";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		BBFFE6AF8E03CC57AF1B8A7B /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).uitests";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Shike;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		C4A15C14A778EF2C893DD47D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Config/CountdownCompanion.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/Watch-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).watchkitapp";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=watchos*]" = com.chandler.shike.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				VALIDATE_PRODUCT = YES;
+				WATCHOS_DEPLOYMENT_TARGET = 10.0;
+			};
+			name = Release;
+		};
+		D054E01AD45DA39F649F633D /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).uitests";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_TARGET_NAME = Shike;
+			};
+			name = Debug;
+		};
+		DA8A73CD727E9705D702D9D1 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).tests";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Shike.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Shike";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		DC5BA049B338EED4DF9CE63D /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_ENTITLEMENTS = Config/ShikeApp.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Config/App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "拾刻计划";
+				INFOPLIST_KEY_ITSAppUsesNonExemptEncryption = NO;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "拾刻需要访问日历以显示和编辑日程、计算空闲时段，并保存你确认的安排。安排时仅经授权发送可用时段，不发送已有事件的标题、地点和备注。";
+				INFOPLIST_KEY_NSCameraUsageDescription = "拍摄包含安排的图片，在设备上识别文字后整理成日程。";
+				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "将你选择导出的倒数日卡片图片保存到照片。";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "选择桌面快捷操作时，读取你允许访问的最新一张图片，并在设备上识别文字。原图不会发送至模型服务。";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chandler.shike;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		ECEC718AC6D2F43074E63EE3 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		FA53F5DC7D4F066BE58F9D63 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 101FF78FE5D2AF30DD2873B5 /* Shared.xcconfig */;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 5;
+				DEVELOPMENT_TEAM = V7SF8825HD;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "$(SHIKE_BUNDLE_ID).tests";
+				"PRODUCT_BUNDLE_IDENTIFIER[sdk=iphoneos*]" = com.chandler.shike.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SUPPORTS_MACCATALYST = NO;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Shike.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Shike";
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1D37A534103CCC039733650D /* Build configuration list for PBXNativeTarget "ShikeWatchUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				61E77C25E0F8D0F9440C4B0A /* Release */,
+				9F006D41D07400E66909C34B /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		5E4EF61B6C60A78A334480F8 /* Build configuration list for PBXNativeTarget "ShikeWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C4A15C14A778EF2C893DD47D /* Release */,
+				4D36CB66DBF533B6F5227AA9 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		673F4A39DF40EE28BFA818A4 /* Build configuration list for PBXNativeTarget "ShikeTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DA8A73CD727E9705D702D9D1 /* Release */,
+				FA53F5DC7D4F066BE58F9D63 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		7AE8BC8E05927CDCEB5661E9 /* Build configuration list for PBXProject "Shike" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				4D2C2DF960D7096DA6FBDC1F /* Debug */,
+				ECEC718AC6D2F43074E63EE3 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		802ED7784684E09A1AAB4100 /* Build configuration list for PBXNativeTarget "ShikeWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AC2BADB413AB51408EAC17C0 /* Release */,
+				0643D5BE903C609414A7EDCF /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		84C34A86AC7204BEA7F8AACE /* Build configuration list for PBXNativeTarget "ShikeWatchWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3DA88EFB4E03AA995FE5AE3C /* Release */,
+				052FE96EADC297DF516BF7CB /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		AB61C0FB8CA54B61BC743348 /* Build configuration list for PBXNativeTarget "ShikeUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BBFFE6AF8E03CC57AF1B8A7B /* Release */,
+				D054E01AD45DA39F649F633D /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B57BE690D76EFBBA9071BA58 /* Build configuration list for PBXNativeTarget "ShikeShare" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				637AB8D4D8CA26074C812E8F /* Release */,
+				B3D5572D4CAE8C9590DCC7CC /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		EA92339CCC89605F8B5F7054 /* Build configuration list for PBXNativeTarget "Shike" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				DC5BA049B338EED4DF9CE63D /* Release */,
+				7648672E4A8230FF268D528B /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/ShikeCore;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		4E49126B3EC3C529E851A59C /* ShikeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */;
+			productName = ShikeCore;
+		};
+		712315AD433DE1F47C2F73E8 /* ShikeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */;
+			productName = ShikeCore;
+		};
+		71D17EA20ED2A809CBE06694 /* ShikeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */;
+			productName = ShikeCore;
+		};
+		96297E68DA3F18907886824E /* ShikeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */;
+			productName = ShikeCore;
+		};
+		B6A444CFB89A5ACA8A3D4753 /* ShikeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */;
+			productName = ShikeCore;
+		};
+		D1F722A5D6EB85C6DC71CDDA /* ShikeCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 7F89512702D51CF3CC566E9C /* XCLocalSwiftPackageReference "Packages/ShikeCore" */;
+			productName = ShikeCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = C3C399D48FD9119C69D6B837 /* Project object */;
+}

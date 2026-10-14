@@ -1,0 +1,662 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:shike:export:schema:1",
+  "title": "Shike application export v1",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "format": {
+      "const": "shike-export"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "exportedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "const": "拾刻"
+        },
+        "version": {
+          "type": "string"
+        },
+        "build": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "build"
+      ]
+    },
+    "preferences": {
+      "$ref": "#/$defs/preferences"
+    },
+    "apiProfiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/apiProfile"
+      }
+    },
+    "prompts": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "extraction": {
+          "$ref": "#/$defs/prompt"
+        },
+        "planning": {
+          "$ref": "#/$defs/prompt"
+        }
+      },
+      "required": [
+        "extraction",
+        "planning"
+      ]
+    },
+    "countdowns": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/countdown"
+      }
+    },
+    "countdownCategories": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/category"
+      }
+    },
+    "importSessions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/session"
+      }
+    }
+  },
+  "required": [
+    "format",
+    "schemaVersion",
+    "exportedAt",
+    "app",
+    "preferences",
+    "apiProfiles",
+    "prompts",
+    "countdowns",
+    "countdownCategories",
+    "importSessions"
+  ],
+  "$defs": {
+    "calendarReference": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": {
+          "type": "string"
+        },
+        "account": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "account"
+      ]
+    },
+    "calendarDisplay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "visibleDays": {
+          "enum": [
+            1,
+            3,
+            7
+          ]
+        },
+        "visibleCalendars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/calendarReference"
+          }
+        },
+        "planningCalendars": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/calendarReference"
+          }
+        },
+        "timeZoneIdentifier": {
+          "type": "string"
+        },
+        "showCountdowns": {
+          "type": "boolean"
+        },
+        "countdownLayout": {
+          "type": "string",
+          "enum": [
+            "single",
+            "double",
+            "strip"
+          ]
+        }
+      },
+      "required": [
+        "visibleDays",
+        "showCountdowns"
+      ]
+    },
+    "preferences": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "iCloudEnabled": {
+          "type": "boolean"
+        },
+        "categoryRoutingEnabled": {
+          "type": "boolean"
+        },
+        "defaultCalendar": {
+          "$ref": "#/$defs/calendarReference"
+        },
+        "categoryCalendars": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/calendarReference"
+          }
+        },
+        "activeProfileID": {
+          "type": "string"
+        },
+        "calendar": {
+          "$ref": "#/$defs/calendarDisplay"
+        }
+      },
+      "required": [
+        "iCloudEnabled",
+        "categoryRoutingEnabled",
+        "categoryCalendars",
+        "activeProfileID",
+        "calendar"
+      ]
+    },
+    "apiProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "baseURL": {
+          "type": "string"
+        },
+        "format": {
+          "type": "string",
+          "enum": [
+            "openAI",
+            "claude",
+            "gemini"
+          ]
+        },
+        "model": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "name",
+        "baseURL",
+        "format",
+        "model"
+      ]
+    },
+    "prompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "isCustom": {
+          "type": "boolean"
+        },
+        "text": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "isCustom",
+        "text"
+      ]
+    },
+    "category": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60
+        }
+      },
+      "required": [
+        "id",
+        "name"
+      ]
+    },
+    "lunarDate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "month": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "day": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 30
+        },
+        "isLeapMonth": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "month",
+        "day",
+        "isLeapMonth"
+      ]
+    },
+    "recurrence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "frequency": {
+          "type": "string",
+          "enum": [
+            "none",
+            "weekly",
+            "monthly",
+            "yearly"
+          ]
+        },
+        "missingDatePolicy": {
+          "const": "clampToLastDay"
+        },
+        "missingLeapMonthPolicy": {
+          "const": "ordinaryMonth"
+        }
+      },
+      "required": [
+        "frequency",
+        "missingDatePolicy",
+        "missingLeapMonthPolicy"
+      ]
+    },
+    "reminder": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "daysBefore": {
+          "type": "array",
+          "items": {
+            "enum": [
+              0,
+              1,
+              3,
+              7
+            ]
+          },
+          "uniqueItems": true
+        },
+        "hour": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 23
+        },
+        "minute": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 59
+        },
+        "milestoneDays": {
+          "type": "array",
+          "maxItems": 60,
+          "uniqueItems": true,
+          "items": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 100000
+          }
+        },
+        "anniversaries": {
+          "type": "boolean"
+        },
+        "dayInterval": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100000
+        }
+      },
+      "required": [
+        "daysBefore",
+        "hour",
+        "minute"
+      ]
+    },
+    "countdown": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 200
+        },
+        "anchorDate": {
+          "type": "string",
+          "format": "date",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        "calendar": {
+          "type": "string",
+          "enum": [
+            "gregorian",
+            "chinese"
+          ]
+        },
+        "lunarDate": {
+          "$ref": "#/$defs/lunarDate"
+        },
+        "recurrence": {
+          "$ref": "#/$defs/recurrence"
+        },
+        "timeZoneIdentifier": {
+          "type": "string"
+        },
+        "categoryID": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "reminder": {
+          "$ref": "#/$defs/reminder"
+        },
+        "includesStartDay": {
+          "type": "boolean"
+        },
+        "targetTime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "hour",
+            "minute",
+            "second"
+          ],
+          "properties": {
+            "hour": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 23
+            },
+            "minute": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 59
+            },
+            "second": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 59
+            }
+          }
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "anchorDate",
+        "calendar",
+        "recurrence",
+        "notes",
+        "pinned",
+        "reminder"
+      ]
+    },
+    "draft": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "title": {
+          "type": "string"
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "work",
+            "personal",
+            "study",
+            "travel",
+            "health",
+            "other"
+          ]
+        },
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "isAllDay": {
+          "type": "boolean"
+        },
+        "timeZoneIdentifier": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "notes": {
+          "type": "string"
+        },
+        "sourceExcerpt": {
+          "type": "string"
+        },
+        "reminderMinutes": {
+          "type": "integer"
+        },
+        "calendar": {
+          "$ref": "#/$defs/calendarReference"
+        },
+        "suggestedCalendar": {
+          "$ref": "#/$defs/calendarReference"
+        },
+        "selected": {
+          "type": "boolean"
+        },
+        "needsReview": {
+          "type": "boolean"
+        },
+        "reviewNotes": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "saved": {
+          "type": "boolean"
+        },
+        "saveInterrupted": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "isAllDay",
+        "timeZoneIdentifier",
+        "location",
+        "notes",
+        "sourceExcerpt",
+        "selected",
+        "needsReview",
+        "reviewNotes",
+        "saved",
+        "saveInterrupted"
+      ]
+    },
+    "conversationTurn": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "role": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "role",
+        "text",
+        "options"
+      ]
+    },
+    "conversation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "goal": {
+          "type": "string"
+        },
+        "turns": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/conversationTurn"
+          }
+        },
+        "start": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "end": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "awaitingReply": {
+          "type": "boolean"
+        },
+        "hasProposal": {
+          "type": "boolean"
+        },
+        "checkedAvailability": {
+          "type": "boolean"
+        },
+        "proposalNeedsUpdate": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "goal",
+        "turns",
+        "start",
+        "end",
+        "awaitingReply",
+        "hasProposal",
+        "checkedAvailability",
+        "proposalNeedsUpdate"
+      ]
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "referenceTimeZone": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "text": {
+          "type": "string"
+        },
+        "hasParsed": {
+          "type": "boolean"
+        },
+        "forcedCategory": {
+          "type": "string",
+          "enum": [
+            "work",
+            "personal",
+            "study",
+            "travel",
+            "health",
+            "other"
+          ]
+        },
+        "drafts": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/draft"
+          }
+        },
+        "planning": {
+          "$ref": "#/$defs/conversation"
+        }
+      },
+      "required": [
+        "id",
+        "createdAt",
+        "referenceTimeZone",
+        "source",
+        "text",
+        "hasParsed",
+        "drafts"
+      ]
+    }
+  }
+}

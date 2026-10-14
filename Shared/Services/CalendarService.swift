@@ -1,0 +1,219 @@
+import EventKit
+import SwiftUI
+import ShikeCore
+
+struct CalendarChoice: Identifiable {
+    let id: String
+    let title: String
+    let account: String
+    let color: Color
+    var canWrite = true
+    var reference: CalendarReference { CalendarReference(title: title, account: account) }
+}
+
+@MainActor final class CalendarService: ObservableObject {
+    let store = EKEventStore()
+    @Published private(set) var calendars: [CalendarChoice] = []
+    @Published private(set) var readableCalendars: [CalendarChoice] = []
+    @Published private(set) var revision = UUID()
+    @Published private(set) var authorized = false
+    private var observer: NSObjectProtocol?
+    private var demoEvents: [String: EventDraft] = [:]
+    private let useDemo: Bool
+    private let reader = CalendarQueryWorker()
+    private var fixtureEvents: [CalendarEventSnapshot]
+
+    init(useDemo: Bool = AppIdentity.isUITesting, fixtureEvents: [CalendarEventSnapshot] = []) {
+        self.useDemo = useDemo
+        self.fixtureEvents = fixtureEvents
+        refresh()
+        observer = NotificationCenter.default.addObserver(forName: .EKEventStoreChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in self?.refresh() }
+        }
+    }
+    deinit { if let observer { NotificationCenter.default.removeObserver(observer) } }
+
+    func refresh() {
+        revision = UUID()
+        if useDemo {
+            #if DEBUG
+            if AppIdentity.isUITesting && ProcessInfo.processInfo.arguments.contains("-calendar-denied-fixture") {
+                authorized = false; calendars = []; readableCalendars = []; return
+            }
+            #endif
+            authorized = true
+            var account = "测试日历"
+            #if DEBUG
+            if AppIdentity.isUITesting && ProcessInfo.processInfo.arguments.contains("-store-screenshots") { account = "我的日历" }
+            #endif
+            calendars = [CalendarChoice(id: "test-calendar", title: "个人日程", account: account, color: .blue),
+                         CalendarChoice(id: "test-work", title: "工作", account: account, color: .green)]
+            readableCalendars = calendars + [CalendarChoice(id: "test-readonly", title: "订阅日历", account: account, color: .orange, canWrite: false)]
+            return
+        }
+        authorized = EKEventStore.authorizationStatus(for: .event) == .fullAccess
+        guard authorized else { calendars = []; readableCalendars = []; return }
+        readableCalendars = store.calendars(for: .event).map {
+            CalendarChoice(id: $0.calendarIdentifier, title: $0.title, account: $0.source.title, color: Color(cgColor: $0.cgColor), canWrite: $0.allowsContentModifications)
+        }.sorted { ($0.account, $0.title) < ($1.account, $1.title) }
+        calendars = readableCalendars.filter(\.canWrite)
+    }
+
+    func requestAccess() async throws {
+        if useDemo { refresh(); return }
+        let status = EKEventStore.authorizationStatus(for: .event)
+        guard status != .denied && status != .restricted else {
+            throw ShikeError.message("日历访问未开启。请到系统设置 → App → 拾刻计划 → 日历，允许完全访问。")
+        }
+        if status != .fullAccess {
+            guard try await store.requestFullAccessToEvents() else {
+                throw ShikeError.message("需要日历完全访问权限，才能选择日历并修改已保存的日程。")
+            }
+            store.reset()
+        }
+        refresh()
+    }
+
+    func preferredCalendarID(_ configured: String) -> String? {
+        if !configured.isEmpty { return calendars.contains { $0.id == configured } ? configured : nil }
+        if useDemo { return calendars.first?.id }
+        return store.defaultCalendarForNewEvents.flatMap { cal in calendars.contains { $0.id == cal.calendarIdentifier } ? cal.calendarIdentifier : nil }
+    }
+
+    func save(_ draft: EventDraft, updatingExisting: Bool = false) throws -> EventDraft {
+        guard authorized else { throw ShikeError.message("请先允许日历完全访问。") }
+        var checked = draft
+        checked.saveAttemptInProgress = false
+        let issues = checked.saveValidationMessages(writableCalendarIDs: Set(calendars.map(\.id)))
+        guard issues.isEmpty else { throw ShikeError.message(issues.joined(separator: "，")) }
+        guard let id = draft.calendarID, calendars.contains(where: { $0.id == id }) else {
+            throw ShikeError.message("目标日历已失效或不可写，请重新选择日历。")
+        }
+        if useDemo {
+            var result = checked
+            result.eventIdentifier = draft.eventIdentifier ?? UUID().uuidString
+            result.calendarItemIdentifier = result.eventIdentifier
+            result.saveError = nil
+            demoEvents[result.eventIdentifier!] = result
+            revision = UUID()
+            return result
+        }
+        guard let calendar = store.calendar(withIdentifier: id), calendar.allowsContentModifications else {
+            throw ShikeError.message("目标日历不可写，请重新选择日历。")
+        }
+        let event: EKEvent
+        if updatingExisting {
+            event = try existingEvent(draft)
+            guard !event.hasRecurrenceRules else { throw ShikeError.message("这个日程已在系统日历中改为重复事件，请在系统日历中修改。") }
+        } else { event = EKEvent(eventStore: store) }
+        event.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        event.startDate = draft.start
+        event.endDate = draft.end
+        event.isAllDay = draft.isAllDay
+        event.timeZone = draft.timeZone
+        event.notes = draft.notes
+        event.location = draft.location
+        event.calendar = calendar
+        event.alarms = draft.reminderMinutes.map { [EKAlarm(relativeOffset: -Double($0 * 60))] } ?? []
+        try store.save(event, span: .thisEvent, commit: true)
+        var result = checked
+        result.eventIdentifier = event.eventIdentifier
+        result.calendarItemIdentifier = event.calendarItemIdentifier
+        result.saveError = nil
+        revision = UUID()
+        return result
+    }
+
+    func latest(_ draft: EventDraft) throws -> EventDraft {
+        if useDemo { return demoEvents[draft.eventIdentifier ?? ""] ?? draft }
+        let event = try existingEvent(draft)
+        guard !event.hasRecurrenceRules else { throw ShikeError.message("这个日程已变为重复事件，请在系统日历中修改。") }
+        var current = draft
+        current.title = event.title ?? ""
+        current.start = event.startDate; current.end = event.endDate
+        current.isAllDay = event.isAllDay
+        current.timeZoneIdentifier = event.timeZone?.identifier ?? draft.timeZoneIdentifier
+        current.location = event.location ?? ""; current.notes = event.notes ?? ""
+        current.calendarID = event.calendar.calendarIdentifier
+        current.eventIdentifier = event.eventIdentifier
+        current.calendarItemIdentifier = event.calendarItemIdentifier
+        current.reminderMinutes = event.alarms?.first.map { Int(-$0.relativeOffset / 60) }
+        current.needsReview = false
+        return current
+    }
+
+    private func existingEvent(_ draft: EventDraft) throws -> EKEvent {
+        guard authorized else { throw ShikeError.message("日历权限已关闭，请重新授权。") }
+        let event = draft.eventIdentifier.flatMap(store.event(withIdentifier:)) ??
+            draft.calendarItemIdentifier.flatMap { store.calendarItem(withIdentifier: $0) as? EKEvent }
+        guard let event else { throw ShikeError.message("系统日历中找不到这个事件，可能已被删除或移动。原记录已保留，不会自动重建。") }
+        guard event.calendar.allowsContentModifications else { throw ShikeError.message("这个事件所在日历目前只读，请在系统日历中处理。") }
+        return event
+    }
+
+    func calendarIDs(for references: [CalendarReference]?) -> Set<String> {
+        guard let references else { return Set(readableCalendars.map(\.id)) }
+        let choices = Dictionary(uniqueKeysWithValues: readableCalendars.map { ($0.id, $0.reference) })
+        return Set(references.compactMap { $0.matchingID(in: choices) })
+    }
+
+    func events(in interval: DateInterval, calendarIDs: Set<String>? = nil) async throws -> [CalendarEventSnapshot] {
+        guard authorized else { throw ShikeError.message("需要日历完全访问权限才能查看已有安排。") }
+        let ids = calendarIDs ?? Set(readableCalendars.map(\.id))
+        guard !ids.isEmpty, interval.duration > 0 else { return [] }
+        let events: [CalendarEventSnapshot]
+        if useDemo {
+            var fixtures = fixtureEvents
+            #if DEBUG
+            if AppIdentity.isUITesting && ProcessInfo.processInfo.arguments.contains("-calendar-fixture") {
+                let day = Calendar.current.startOfDay(for: .now)
+                fixtures += (0..<7).map { index in
+                    let start = Calendar.current.date(byAdding: .day, value: index, to: day)!.addingTimeInterval(3600 * 10)
+                    return CalendarEventSnapshot(eventID: "demo-\(index)", itemID: "demo-\(index)", calendarID: index == 2 ? "test-readonly" : "test-work", title: ["产品设计评审", "读书与笔记", "朋友的展览"][index % 3], start: start, end: start.addingTimeInterval(5400))
+                }
+            }
+            #endif
+            events = fixtures + demoEvents.values.compactMap { draft in
+                guard let start = draft.start, let end = draft.end else { return nil }
+                return CalendarEventSnapshot(eventID: draft.eventIdentifier!, itemID: draft.calendarItemIdentifier!, calendarID: draft.calendarID!, title: draft.title, start: start, end: end, allDay: draft.isAllDay, location: draft.location, notes: draft.notes, timeZone: draft.timeZoneIdentifier)
+            }
+        } else { events = try await reader.events(in: interval, ids: ids) }
+        try Task.checkCancellation()
+        guard authorized else { throw ShikeError.message("日历访问已关闭。") }
+        return events.filter { ids.contains($0.calendarID) && Scheduling.overlaps($0.interval, interval) }
+            .sorted { ($0.start, $0.id) < ($1.start, $1.id) }
+    }
+
+    /// Resolve this occurrence in the editing store; never use an EKEvent from the background store.
+    func editableEvent(_ snapshot: CalendarEventSnapshot) throws -> EKEvent {
+        guard authorized else { throw ShikeError.message("日历权限已关闭。") }
+        guard let calendar = store.calendar(withIdentifier: snapshot.calendarID) else { throw ShikeError.message("日历已不可用，请刷新。") }
+        let predicate = store.predicateForEvents(withStart: snapshot.start.addingTimeInterval(-1), end: max(snapshot.end, snapshot.start.addingTimeInterval(1)), calendars: [calendar])
+        guard let event = store.events(matching: predicate).first(where: {
+            ($0.eventIdentifier == snapshot.eventID || $0.calendarItemIdentifier == snapshot.itemID) && $0.startDate == snapshot.start
+        }) else { throw ShikeError.message("这个事件已被移动或删除，请刷新日历。") }
+        guard event.calendar.allowsContentModifications else { throw ShikeError.message("这个日历只支持查看。") }
+        return event
+    }
+}
+
+private actor CalendarQueryWorker {
+    private let store = EKEventStore()
+    func events(in interval: DateInterval, ids: Set<String>) throws -> [CalendarEventSnapshot] {
+        guard EKEventStore.authorizationStatus(for: .event) == .fullAccess else { throw ShikeError.message("日历访问未开启。") }
+        store.reset()
+        let calendars = store.calendars(for: .event).filter { ids.contains($0.calendarIdentifier) }
+        guard !calendars.isEmpty else { return [] }
+        let predicate = store.predicateForEvents(withStart: interval.start, end: interval.end, calendars: calendars)
+        let result = store.events(matching: predicate).filter { $0.status != .canceled }.compactMap { event -> CalendarEventSnapshot? in
+            guard let start = event.startDate, let end = event.endDate, end > start else { return nil }
+            let declined = event.attendees?.contains { $0.isCurrentUser && $0.participantStatus == .declined } == true
+            return CalendarEventSnapshot(eventID: event.eventIdentifier ?? event.calendarItemIdentifier, itemID: event.calendarItemIdentifier,
+                calendarID: event.calendar.calendarIdentifier, title: event.title ?? "未命名日程", start: start, end: end,
+                allDay: event.isAllDay, location: event.location ?? "", notes: event.notes ?? "", timeZone: event.timeZone?.identifier ?? TimeZone.current.identifier,
+                blocksTime: event.availability != .free && !declined)
+        }
+        try Task.checkCancellation()
+        return result
+    }
+}

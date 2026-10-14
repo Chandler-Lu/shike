@@ -1,0 +1,36 @@
+.build/
+build/
+/docs/
+DerivedData/
+.DS_Store
+*.xcuserstate
+xcuserdata/
+Config/Local.xcconfig
+.tools/
+*.xcresult/
+
+# Local credentials, signing exports and runtime data
+.env
+.env.*
+!.env.example
+*.p12
+*.p8
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+*.cer
+*.ipa
+*.xcarchive/
+*.dSYM/
+*.store
+*.store-shm
+*.store-wal
+Config/Review.local.*
+__pycache__/
+*.py[cod]
+
+
+# Personal third-party backups and app exports
+*.idmbaks
+Shike_Export_*.json

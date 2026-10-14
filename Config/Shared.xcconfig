@@ -1,0 +1,12 @@
+// Override these values in Local.xcconfig for your Apple developer team.
+SHIKE_BUNDLE_ID = com.chandler.shike
+SHIKE_APP_GROUP = group.com.chandler.shike
+SHIKE_KEYCHAIN_SUFFIX = com.chandler.shike.shared
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+IPHONEOS_DEPLOYMENT_TARGET = 17.0
+SWIFT_VERSION = 5.0
+SHIKE_CLOUD_CONTAINER = iCloud.com.chandler.shike
+SHIKE_CLOUD_ENVIRONMENT = Development
+APS_ENVIRONMENT = development
+#include? "Local.xcconfig"

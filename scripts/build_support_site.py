@@ -1,0 +1,61 @@
+#!/usr/bin/env python3
+"""Generate static support pages; privacy text is shared with the shipped iOS resource."""
+from html import escape
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / 'docs/app-store/site/shike'
+STYLE = '''
+:root { color-scheme:light; --ink:#293744; --blue:#3057bd; --paper:#fafaf3; }
+* { box-sizing:border-box; } body { margin:0; background:var(--paper); color:var(--ink); font:17px/1.85 -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
+main { max-width:780px; margin:40px auto; padding:24px; } h1 { font-size:34px; line-height:1.3; margin:24px 0; } h2 { margin-top:32px; font-size:23px; }
+a { color:var(--blue); text-underline-offset:4px; } a:focus-visible { outline:3px solid var(--blue); outline-offset:4px; }
+nav { display:flex; flex-wrap:wrap; gap:20px; border-bottom:1px solid #b9c2bd; padding-bottom:20px; }
+footer { margin-top:36px; padding-top:18px; border-top:1px solid #b9c2bd; font-size:14px; } p { overflow-wrap:anywhere; }
+'''
+
+
+def page(title, body, path):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    html = f'''<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="{escape(title)} · Chandler-Lu"><title>{escape(title)} · 拾刻计划</title><style>{STYLE}</style></head>
+<body><main><nav aria-label="导航"><a href="../support/">帮助与支持</a><a href="../privacy/">隐私政策</a><a href="https://www.yeslu.cn">作者主页</a></nav>
+{body}
+<footer>© 2026 Chandler-Lu · <a href="mailto:trlu1997@outlook.com">trlu1997@outlook.com</a></footer></main></body></html>
+'''
+    path.write_text(html)
+
+
+policy = (ROOT / 'Shared/Resources/PrivacyPolicy.txt').read_text()
+parts = []
+for index, paragraph in enumerate(policy.strip().split('\n\n')):
+    lines = paragraph.splitlines()
+    if index == 0:
+        parts.append('<h1>' + escape(lines[0]) + '</h1><p>' + '<br>'.join(map(escape, lines[1:])) + '</p>')
+    else:
+        parts.append('<h2>' + escape(lines[0]) + '</h2>')
+        parts.extend('<p>' + escape(line) + '</p>' for line in lines[1:])
+page('拾刻计划隐私政策', '\n'.join(parts), OUT / 'privacy/index.html')
+
+support = '''<h1>拾刻计划支持</h1>
+<p>把零散安排，收进日历。拾刻计划是一款面向 iPhone 的手帐风日程与纪念日工具，由 Chandler-Lu 开发。</p>
+<h2>开始使用</h2><ol><li>在设置中展开“模型与 API”，添加接口名称、API 格式、HTTPS 地址、Key 和模型，保存配置。</li>
+<li>粘贴文字、选择图片、拍照，或从其他 App 的分享菜单打开拾刻计划。图片在设备上识别为文字。</li>
+<li>点“提取日程”，首次使用该服务时确认内容去向。核对草稿后，允许日历访问并选择目标日历，再点“加入日历”。</li></ol>
+<p>App 免费，无内购。模型服务商可能另行收费；需要你自行提供可用接口。首版界面为简体中文。</p>
+<h2>帮我安排</h2><p>在首页写下想做的事，点“帮我安排”。默认安排包含今天的 7 天，可在“安排范围与参考日历”中调整，最多 30 天。逐题回答耗时、频次和方便时段，也可让模型先给一版。方案可以手动修改或继续输入调整要求，确认后再写入日历。问答自动保存在本地记录中。</p>
+<h2>查看日历</h2><p>日历页可切换当天、3 天、7 天时间轴，按系统日历筛选，点事件查看详情并使用系统编辑器修改。只读日历只能查看。显示筛选与安排时参考的日历独立，隐藏显示不会自动忽略时间冲突。</p>
+<h2>桌面长按图标</h2><p>长按桌面的拾刻计划图标，可从剪贴板或最近一张图片导入。快捷操作只填入首页，不自动请求模型；当前会话先保存在记录中。最近图片需要照片读取权限；有限授权时仅取已授权照片中创建时间最新的一张，其他图片可通过首页相册手动选择。</p>
+<h2>接口或模型无法使用</h2><p>确认选择了对应的 OpenAI、Claude 或 Gemini 格式，并检查 HTTPS 地址、账户额度及模型是否支持文字生成。可先“测试连接”，其只发送内置示例。部分服务不提供模型列表，此时可手动输入模型 ID。完整提取地址、服务根地址及代理路径均可使用。不要把 Key 写入网址。</p>
+<h2>识别或日期不准确</h2><p>图片应清晰、方向正确；检查 OCR 原文后再提取。相对日期以该次导入的参考日期及时区理解。模型输出只是建议，可修改日期、时间、地点、备注和日历；有歧义时会引导核对。时区可搜索 GMT 偏移，GMT+8 使用上海。</p>
+<h2>没有可写日历</h2><p>在系统设置中允许拾刻计划“日历完全访问”，并在系统日历中创建日历或添加日历账户。只读日历不能写入。已删除事件不会自动重建。重复事件请从日历页使用系统编辑器修改。</p>
+<h2>分享菜单找不到拾刻计划</h2><p>先打开一次主 App 并配置接口。再在其他 App 选择文字或图片，打开系统分享菜单，在“更多”中启用拾刻计划。支持最多 5 张图片，不支持 PDF 或网页抓取。</p>
+<h2>自定义提示词</h2><p>设置依次为日历偏好、模型与 API、提示词和 iCloud 同步，点击分组展开。提示词分别设置“提取日程”和“帮我安排”，保存后生效，可恢复默认；每套最多 12000 字，开启设置同步后也会同步提示词。日程字段格式由应用自动补充。</p>
+<h2>日子与备份</h2><p>正数日与倒数日支持公历、农历、每周/月/年重复、分组、置顶和本地提醒。列表可选单列、双列或窄条，下拉搜索、深拉新增。支持包含起始日、秒级计时、周年与整数日提醒，也能一次用自然语言识别多个日子，核对后保存，或导出竖版分享卡片；无需日历权限也能在拾刻计划日历里显示，不会自动写入系统日历。设置中的统一 iCloud 开关同时控制倒数日同步。设置下方可导出 UTF-8 JSON，包含原文、问答和普通设置，不含 API Key；请自行保管。支持预览并恢复拾刻计划 JSON 备份，按编号合并且保留本机已有内容，历史日程不会自动再次写入系统日历。自动备份可同时保存到本地和 iCloud Drive，各保留最近 30 份。Days Matter 加密备份暂不支持。</p>
+<h2>小组件与 Apple Watch</h2><p>桌面提供小、中、大尺寸日子小组件，正数日和倒数日均可显示：小号一主一辅，中、大号分为“值得期待”和“已经走过”，配有日期、置顶标记和年度进度。点一个日子可打开详情。手表提供日子列表、详情与智能叠放。可选择全部或指定分组，各自记住选择。手表通过配对 iPhone 更新，离线可查看已有缓存。打开手机 App 后仍未更新时，请确认蓝牙连接、配对状态和手表上的拾刻计划已安装。</p><h2>iCloud 设置没有同步</h2><p>两台设备使用同一 Apple 账户，开启 iCloud Drive 及“密码和钥匙串”，并在拾刻计划中开启同步。设置和 Key 可能分开到达，可稍后检查同步。关闭开关仅停止当前设备的同步。日程原文、图片和记录不通过此设置同步，系统日历有自己的账户同步机制。</p>
+<h2>删除记录或撤销授权</h2><p>在“记录”中删除导入记录不会删除系统日历事件；可在日历页的系统编辑器或系统日历中另行删除。设置 → 关于内容与隐私 → 撤销模型发送授权，会让下一次提取重新询问，但无法撤回已发送内容。需要停用 API Key 时，请到服务提供方撤销。更多保存与删除细节请阅读隐私政策。</p>
+<h2>联系我们</h2><p><a href="mailto:trlu1997@outlook.com?subject=Shike%20Support">发送邮件至 trlu1997@outlook.com</a>。请说明应用版本、iOS 版本、操作步骤及错误提示；可附已脱敏截图。不要发送 API Key、私人日程或他人的个人信息。</p>
+'''
+page('拾刻计划支持', support, OUT / 'support/index.html')
+print('Generated privacy and support pages in docs/app-store/site/shike/')
