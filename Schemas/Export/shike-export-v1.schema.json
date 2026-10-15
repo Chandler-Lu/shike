@@ -615,6 +615,10 @@
           "type": "string",
           "format": "date-time"
         },
+        "referenceDate": {
+          "type": "string",
+          "format": "date-time"
+        },
         "referenceTimeZone": {
           "type": "string"
         },

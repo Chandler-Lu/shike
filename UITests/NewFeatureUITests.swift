@@ -25,6 +25,68 @@ final class NewFeatureUITests: XCTestCase {
     private func capture(_ name: String, app: XCUIApplication) {
         let image = XCTAttachment(screenshot: app.screenshot()); image.name = name; image.lifetime = .keepAlways; add(image)
     }
+    private func expandSummary(_ app: XCUIApplication) {
+        #if !targetEnvironment(macCatalyst)
+        let bar = app.navigationBars["日历总结"]
+        bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2)).press(forDuration: 0.1,
+            thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)))
+        #endif
+    }
+    func testHomeKeyboardKeepsNavigationBarAtTop() {
+        let app = launch()
+        let source = app.textViews["sourceText"]
+        let navigation = app.navigationBars["拾刻计划"]
+        XCTAssertTrue(source.waitForExistence(timeout: 8))
+        let originalTop = navigation.frame.minY
+        capture("home-before-keyboard", app: app)
+        for index in 1...2 {
+            activate(source); source.typeText("测试")
+            XCTAssertTrue(app.buttons["收起键盘"].waitForExistence(timeout: 5))
+            capture("home-keyboard-\(index)", app: app)
+            XCTAssertEqual(navigation.frame.minY, originalTop, accuracy: 1, "输入时导航栏不应向下跳动")
+            activate(app.buttons["收起键盘"])
+            XCTAssertEqual(navigation.frame.minY, originalTop, accuracy: 1)
+        }
+        XCTAssertEqual(source.value as? String, "测试测试")
+        capture("home-after-keyboard", app: app)
+    }
+
+    func testSourceTypingAndReferenceDateRefreshKeepInputAfterBackgroundAndExpansion() {
+        let app = launch(extra: ["-seed-example", "-store-screenshots"])
+        let input = app.textViews["sourceText"]
+        XCTAssertTrue(input.waitForExistence(timeout: 8))
+        let original = input.value as? String
+        let refresh = app.buttons["refreshReferenceDate"]
+        let oldReference = refresh.value as? String
+        activate(refresh)
+        XCTAssertNotEqual(refresh.value as? String, oldReference)
+        XCTAssertEqual(input.value as? String, original)
+        XCTAssertFalse(app.buttons["allowExtraction"].exists)
+        XCTAssertFalse(app.buttons["editEvent-产品设计评审"].exists)
+        activate(app.buttons["新建导入"])
+        activate(input)
+        for (index, text) in ["abc", "def", " 明天下午三点开会"].enumerated() {
+            input.typeText(text)
+            capture("source-typing-\(index + 1)", app: app)
+        }
+        XCTAssertEqual(input.value as? String, "abcdef 明天下午三点开会")
+        activate(app.buttons["收起键盘"])
+        app.buttons["expand-sourceText"].doubleTap()
+        let expanded = app.textViews["expanded-sourceText"]
+        XCTAssertTrue(expanded.waitForExistence(timeout: 5))
+        XCTAssertEqual(expanded.value as? String, "abcdef 明天下午三点开会")
+        activate(expanded); expanded.typeText("，带笔记")
+        activate(app.buttons["collapse-sourceText"])
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        XCTAssertEqual(input.value as? String, "abcdef 明天下午三点开会，带笔记")
+        #if !targetEnvironment(macCatalyst)
+        XCUIDevice.shared.press(.home); app.activate()
+        #endif
+        XCTAssertTrue(input.waitForExistence(timeout: 5))
+        XCTAssertEqual(input.value as? String, "abcdef 明天下午三点开会，带笔记")
+        capture("source-after-resume", app: app)
+    }
+
     func testAPIStreamingDiagnosticsAndCancellation() {
         let app = launch(extra: ["-api-stream-fixture"])
         func show(_ element: XCUIElement) {
@@ -59,6 +121,107 @@ final class NewFeatureUITests: XCTestCase {
         XCTAssertTrue(app.buttons["apiDiagnostics"].exists)
     }
 
+    func testPlanningCalendarSelectionRestartAndSingleKeyboardToolbar() {
+        let app = launch(extra: ["-seed-example", "-planning-fixture"])
+        let plan = app.buttons["planEvents"]
+        XCTAssertTrue(plan.waitForExistence(timeout: 8)); reveal(plan, app: app); activate(plan)
+        let range = app.buttons["安排范围与参考日历"]
+        XCTAssertTrue(range.waitForExistence(timeout: 5)); activate(range)
+        let none = app.buttons["deselectAllCalendars"]
+        reveal(none, app: app); activate(none)
+        let switches = app.switches.matching(NSPredicate(format: "identifier BEGINSWITH %@", "calendarFilter-"))
+        XCTAssertEqual(switches.count, 3)
+        for item in switches.allElementsBoundByIndex {
+            XCTAssertEqual(item.value as? String, "0")
+            XCTAssertGreaterThanOrEqual(item.frame.minX, app.frame.minX + 16)
+            XCTAssertLessThanOrEqual(item.frame.maxX, app.frame.maxX - 16)
+        }
+        capture("planning-calendar-switches", app: app)
+        activate(app.buttons["selectAllCalendars"])
+        for item in switches.allElementsBoundByIndex { XCTAssertEqual(item.value as? String, "1") }
+        activate(none); activate(range)
+        let start = app.buttons["startPlanning"]
+        reveal(start, app: app); activate(start)
+        let option = app.buttons["planningOption-每次 30 分钟，晚上安排"]
+        XCTAssertTrue(option.waitForExistence(timeout: 8)); reveal(option, app: app); activate(option)
+        let answer = app.textFields["planningAnswer"].exists ? app.textFields["planningAnswer"] : app.textViews["planningAnswer"]
+        XCTAssertTrue(answer.waitForExistence(timeout: 8)); reveal(answer, app: app); activate(answer)
+        answer.typeText("稍晚一点")
+        XCTAssertEqual(app.buttons.matching(identifier: "收起键盘").count, 1)
+        capture("planning-single-keyboard-toolbar", app: app)
+        activate(app.buttons["收起键盘"])
+        activate(app.buttons["restartPlanning"])
+        let goal = app.textFields["planningGoal"].exists ? app.textFields["planningGoal"] : app.textViews["planningGoal"]
+        XCTAssertTrue(goal.waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["planning-editEvent-读书与笔记"].exists)
+        XCTAssertFalse(app.buttons["planningOption-每次 30 分钟，晚上安排"].exists)
+        XCTAssertFalse(start.isEnabled)
+        activate(goal); goal.typeText("学习摄影")
+        activate(app.buttons["收起键盘"])
+        activate(range); reveal(none, app: app)
+        for item in switches.allElementsBoundByIndex { XCTAssertEqual(item.value as? String, "0") }
+        activate(range); reveal(start, app: app); activate(start)
+        XCTAssertTrue(option.waitForExistence(timeout: 8))
+    }
+
+    func testSummaryBannerHidesAndOpensResultAcrossTabsWithFollowUp() {
+        let app = launch(extra: ["-summary-delay-fixture", "-summary-routing-fixture"]); section(3, name: "日历", app: app)
+        activate(app.buttons["summarizeCalendar"])
+        let close = app.buttons["closeCalendarSummary"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        capture("calendar-summary-progress", app: app)
+        activate(close)
+        section(4, name: "倒数日", app: app)
+        let banner = app.buttons["modelJobBanner"]
+        XCTAssertTrue(banner.waitForExistence(timeout: 3))
+        XCTAssertGreaterThanOrEqual(app.navigationBars["倒数日"].frame.minY, banner.frame.maxY - 1, "提示条不能盖住导航栏")
+        #if !targetEnvironment(macCatalyst)
+        banner.swipeLeft()
+        XCTAssertTrue(banner.waitForNonExistence(timeout: 3))
+        #endif
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", "模型结果已就绪"), object: banner)], timeout: 30), .completed)
+        activate(banner)
+        XCTAssertTrue(app.staticTexts["calendarSummaryOverview"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["模型任务"].exists, "直接显示这次总结，不应停在任务列表")
+        let question = app.textFields["summaryFollowUpInput"].exists ? app.textFields["summaryFollowUpInput"] : app.textViews["summaryFollowUpInput"]
+        XCTAssertTrue(question.waitForExistence(timeout: 5))
+        activate(question); question.typeText("留多久休息？")
+        XCTAssertEqual(app.buttons.matching(identifier: "收起键盘").count, 1)
+        activate(app.buttons["sendSummaryFollowUp"])
+        XCTAssertTrue(app.staticTexts["pendingSummaryQuestion"].waitForExistence(timeout: 5))
+        activate(close)
+        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: NSPredicate(format: "exists == true AND label CONTAINS %@", "模型结果已就绪"), object: banner)], timeout: 30), .completed)
+        activate(banner)
+        let overview = app.staticTexts["calendarSummaryOverview"]
+        XCTAssertTrue(overview.waitForExistence(timeout: 5))
+        XCTAssertTrue(overview.label.contains("留多久休息？"))
+        XCTAssertTrue(app.staticTexts["此前的总结与追问（1）"].exists)
+        capture("calendar-summary-followup", app: app)
+    }
+
+    func testSummaryReopensWhenCompletedAfterSwipeDismiss() {
+        let app = launch(extra: ["-summary-delay-fixture"]); section(3, name: "日历", app: app)
+        let summarize = app.buttons["summarizeCalendar"]
+        XCTAssertTrue(summarize.waitForExistence(timeout: 8)); activate(summarize)
+        let close = app.buttons["closeCalendarSummary"]
+        XCTAssertTrue(close.waitForExistence(timeout: 5))
+        let bar = app.navigationBars["日历总结"]
+        let start = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.2))
+        let end = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.95))
+        start.press(forDuration: 0.1, thenDragTo: end)
+        XCTAssertTrue(close.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(app.staticTexts["calendarSummaryOverview"].waitForExistence(timeout: 12))
+        expandSummary(app)
+        capture("calendar-summary-restored", app: app)
+        let plain = app.buttons["copySummaryPlain"].firstMatch; reveal(plain, app: app); activate(plain)
+        XCTAssertTrue(app.staticTexts["已复制纯文本"].waitForExistence(timeout: 3))
+        activate(app.buttons["copySummaryMarkdown"].firstMatch)
+        XCTAssertTrue(app.staticTexts["已复制 Markdown"].waitForExistence(timeout: 3))
+        activate(close)
+        XCTAssertTrue(close.waitForNonExistence(timeout: 3))
+        XCTAssertTrue(summarize.isHittable)
+    }
+
     func testSummaryOpensDirectlyAndCopiesBothFormats() {
         let app = launch(); section(3, name: "日历", app: app)
         let summarize = app.buttons["summarizeCalendar"]
@@ -66,6 +229,8 @@ final class NewFeatureUITests: XCTestCase {
         XCTAssertTrue(app.staticTexts["calendarSummaryOverview"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.buttons["allowExtraction"].exists)
         capture("calendar-summary-bottom-sheet", app: app)
+        expandSummary(app)
+        capture("calendar-summary-expanded", app: app)
         let plain = app.buttons["copySummaryPlain"].firstMatch; reveal(plain, app: app); activate(plain)
         XCTAssertTrue(app.staticTexts["已复制纯文本"].waitForExistence(timeout: 3))
         activate(app.buttons["copySummaryMarkdown"].firstMatch)

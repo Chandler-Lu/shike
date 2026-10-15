@@ -100,6 +100,8 @@ public struct CalendarEventSnapshot: Identifiable, Equatable, Sendable {
     public var notes: String
     public var timeZone: String
     public var blocksTime: Bool
+    /// All-day entries remain visible in the calendar but never reserve planning time.
+    public var blocksPlanningTime: Bool { blocksTime && !allDay }
     public var interval: DateInterval { DateInterval(start: start, end: max(start, end)) }
     public func interval(in displayZone: TimeZone) -> DateInterval {
         guard allDay else { return interval }

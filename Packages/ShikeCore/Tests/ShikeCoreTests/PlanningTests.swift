@@ -4,6 +4,64 @@ import XCTest
 final class PlanningTests: XCTestCase {
     private let zone = TimeZone(identifier: "America/New_York")!
     private func date(_ text: String) -> Date { ISO8601DateFormatter().date(from: text)! }
+    func testPlanningUsesLocalOffsetsForEveryTimestampIncludingDST() async throws {
+        defer { MockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [MockURLProtocol.self]
+        let client = LLMClient(session: URLSession(configuration: config))
+        for (zoneName, now, rangeEnd, start, end) in [
+            ("Asia/Shanghai", "2026-10-15T21:25:00+08:00", "2026-10-22T00:00:00+08:00", "2026-10-17T08:00:00+08:00", "2026-10-17T17:00:00+08:00"),
+            ("America/New_York", "2026-03-07T12:00:00-05:00", "2026-03-14T00:00:00-04:00", "2026-03-08T08:00:00-04:00", "2026-03-08T17:00:00-04:00")
+        ] {
+            let timeZone = TimeZone(identifier: zoneName)!
+            let reference = date(now)
+            let plan = PlanningConversation(goal: "周六去北京旅行一天", now: reference, timeZone: timeZone)
+            var draft = EventDraft(); draft.title = "旅行"; draft.start = date(start); draft.end = date(end)
+            for format in APIFormat.allCases {
+                MockURLProtocol.handler = { request in
+                    var data = request.httpBody ?? Data()
+                    if let stream = request.httpBodyStream {
+                        stream.open(); defer { stream.close() }
+                        var buffer = [UInt8](repeating: 0, count: 4096)
+                        while stream.hasBytesAvailable { let n = stream.read(&buffer, maxLength: buffer.count); if n <= 0 { break }; data.append(buffer, count: n) }
+                    }
+                    let raw = String(decoding: data, as: UTF8.self)
+                    XCTAssertTrue(raw.contains("不能用它标记未经换算的当地时间"))
+                    let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+                    let input: String
+                    if format == .gemini {
+                        let contents = try XCTUnwrap(body["contents"] as? [[String: Any]])
+                        input = try XCTUnwrap((contents.first?["parts"] as? [[String: String]])?.first?["text"])
+                    } else { input = try XCTUnwrap((body["messages"] as? [[String: String]])?.last?["content"]) }
+                    let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any])
+                    XCTAssertEqual(payload["now"] as? String, now)
+                    XCTAssertEqual(payload["rangeEndExclusive"] as? String, rangeEnd)
+                    let iso = ISO8601DateFormatter(); iso.timeZone = timeZone
+                    XCTAssertEqual(payload["rangeStart"] as? String, iso.string(from: plan.start))
+                    let intervals = try XCTUnwrap(payload["availableIntervals"] as? [[String: String]])
+                    XCTAssertEqual(intervals.first?["start"], now); XCTAssertEqual(intervals.first?["end"], rangeEnd)
+                    let proposal = try XCTUnwrap(payload["currentProposal"] as? [[String: Any]])
+                    XCTAssertEqual(proposal.first?["start"] as? String, start)
+                    XCTAssertEqual(proposal.first?["end"] as? String, end)
+                    let content = "{\"kind\":\"proposal\",\"message\":\"当地 08:00 至 17:00\",\"events\":[{\"title\":\"北京旅行\",\"start\":\"\(start)\",\"end\":\"\(end)\",\"timeZone\":\"\(zoneName)\"}]}"
+                    let envelope: [String: Any]
+                    switch format {
+                    case .openAI: envelope = ["choices": [["message": ["content": content], "finish_reason": "stop"]]]
+                    case .claude: envelope = ["content": [["type": "text", "text": content]], "stop_reason": "end_turn"]
+                    case .gemini: envelope = ["candidates": [["content": ["parts": [["text": content]]], "finishReason": "STOP"]]]
+                    }
+                    return (200, try JSONSerialization.data(withJSONObject: envelope))
+                }
+                let reply = try await client.plan(conversation: plan, drafts: [draft], timeZone: timeZone, referenceDate: reference,
+                    available: [DateInterval(start: reference, end: plan.end)], configuration: APIConfiguration(baseURL: "https://test.example", model: "fixture", format: format), apiKey: "fixture", prompts: PromptSettings(planning: "自定义规则"))
+                var calendar = Calendar(identifier: .gregorian); calendar.timeZone = timeZone
+                XCTAssertEqual(calendar.component(.hour, from: try XCTUnwrap(reply.drafts.first?.start)), 8)
+                XCTAssertEqual(calendar.component(.hour, from: try XCTUnwrap(reply.drafts.first?.end)), 17)
+            }
+        }
+        // UTC is still a valid absolute instant; don't blindly subtract eight hours from model output.
+        let utc = try PlanningReply.decode(#"{"kind":"proposal","message":"上海 08:00","events":[{"title":"出发","start":"2026-10-17T00:00:00Z","end":"2026-10-17T01:00:00Z","timeZone":"Asia/Shanghai"}]}"#, timeZone: TimeZone(identifier: "Asia/Shanghai")!)
+        XCTAssertEqual(utc.drafts.first?.start, date("2026-10-17T08:00:00+08:00"))
+    }
     func testAvailabilityMergesClipsAndKeepsAdjacentBoundariesFree() {
         let base = Date(timeIntervalSince1970: 0)
         func range(_ a: Double, _ b: Double) -> DateInterval { DateInterval(start: base.addingTimeInterval(a), end: base.addingTimeInterval(b)) }
@@ -45,6 +103,7 @@ final class PlanningTests: XCTestCase {
         object.removeValue(forKey: "planning")
         let restored = try JSONDecoder().decode(ImportSession.self, from: JSONSerialization.data(withJSONObject: object))
         XCTAssertEqual(restored.text, "旧记录"); XCTAssertNil(restored.planning)
+        XCTAssertNil(restored.referenceDate); XCTAssertEqual(restored.effectiveReferenceDate, restored.createdAt)
         session.planning = PlanningConversation(goal: session.text)
         session.planning?.turns = [PlanningTurn(role: "user", text: "晚上半小时")]
         XCTAssertEqual(try JSONDecoder().decode(ImportSession.self, from: JSONEncoder().encode(session)), session)
@@ -75,6 +134,8 @@ final class PlanningTests: XCTestCase {
                 }
                 let raw = String(decoding: data, as: UTF8.self)
                 XCTAssertTrue(raw.contains("availableIntervals")); XCTAssertTrue(raw.contains("conversation"))
+                XCTAssertTrue(raw.contains("自定义安排偏好"))
+                XCTAssertTrue(raw.contains("全天日程不占用时间"), "自定义提示词也必须保留应用的全天占用规则")
                 XCTAssertFalse(raw.contains("private-calendar-id")); XCTAssertFalse(raw.contains("private-event-id"))
                 XCTAssertEqual(request.url?.query, format == .gemini ? "alt=sse" : nil)
                 let content = #"{"kind":"question","message":"晚上几点方便？","options":["七点","八点"]}"#
@@ -87,7 +148,8 @@ final class PlanningTests: XCTestCase {
                 return (200, try JSONSerialization.data(withJSONObject: envelope))
             }
             let result = try await client.plan(conversation: plan, drafts: [draft], timeZone: zone, referenceDate: plan.start,
-                available: [DateInterval(start: plan.start, end: plan.end)], configuration: APIConfiguration(baseURL: "https://test.example/custom", model: "model", format: format), apiKey: "fixture-key")
+                available: [DateInterval(start: plan.start, end: plan.end)], configuration: APIConfiguration(baseURL: "https://test.example/custom", model: "model", format: format), apiKey: "fixture-key",
+                prompts: PromptSettings(planning: "自定义安排偏好"))
             XCTAssertEqual(result.kind, .question)
         }
     }

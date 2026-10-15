@@ -63,6 +63,30 @@ final class NativeServiceTests: XCTestCase {
         XCTAssertNotNil(controller.consentRequest); XCTAssertEqual(PlanningNativeTransport.requests.count, 2)
     }
 
+    @MainActor func testRefreshingReferenceDatePersistsWithoutChangingInputDraftsOrCreationTime() async throws {
+        let start = Date.now.addingTimeInterval(86400), end = start.addingTimeInterval(86400)
+        let controller = try planningController(events: [], range: DateInterval(start: start, end: end), timeZone: .current,
+            response: #"{"events":[{"title":"测试会议","start":"2030-01-01T10:00:00+08:00","end":"2030-01-01T11:00:00+08:00","allDay":false}]}"#)
+        controller.session.planning = nil
+        controller.session.createdAt = Date(timeIntervalSince1970: 1_600_000_000)
+        controller.session.text = "明天下午开会"
+        controller.session.drafts = [reviewEvent("原有草稿")]; controller.session.hasParsed = true
+        let before = controller.session, reference = Date(timeIntervalSince1970: 1_800_000_000)
+        controller.refreshReferenceDate(now: reference)
+        XCTAssertEqual(controller.session.createdAt, before.createdAt)
+        XCTAssertEqual(controller.session.text, before.text); XCTAssertEqual(controller.session.drafts, before.drafts)
+        XCTAssertEqual(try controller.environment.store?.all().first?.effectiveReferenceDate, reference)
+        XCTAssertTrue(PlanningNativeTransport.requests.isEmpty, "更新时间不应自动调用模型")
+        controller.parse(); controller.allowExtraction(); try await waitForOperation(controller)
+        XCTAssertNil(controller.errorMessage)
+        let request = try XCTUnwrap(PlanningNativeTransport.requests.last)
+        XCTAssertTrue(request.contains(ISO8601DateFormatter().string(from: reference)))
+        XCTAssertFalse(request.contains(ISO8601DateFormatter().string(from: before.createdAt)))
+        controller.busyMessage = "正在提取"
+        controller.refreshReferenceDate(now: reference.addingTimeInterval(3600))
+        XCTAssertEqual(controller.session.effectiveReferenceDate, reference, "请求进行中不应更改参考时间")
+    }
+
     @MainActor func testPlanningConsentDoesNotInheritOldTextOrCalendarGrants() throws {
         let defaults = try consentDefaults()
         let configuration = APIConfiguration(baseURL: "https://example.com/v1", model: "model")
@@ -76,6 +100,168 @@ final class NativeServiceTests: XCTestCase {
         XCTAssertTrue(consent.allows(planning)); XCTAssertFalse(consent.allows(availability))
         consent.grant(availability); XCTAssertTrue(consent.allows(availability))
         consent.revokeAll(); XCTAssertFalse(consent.allows(text))
+    }
+
+    @MainActor func testPlanningAvailabilityIgnoresAllDayButPreservesTimedOccupancy() async throws {
+        let zone = TimeZone(identifier: "Asia/Shanghai")!
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone
+        let start = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now))!
+        let end = calendar.date(byAdding: .day, value: 3, to: start)!
+        let allDay = CalendarEventSnapshot(eventID: "private-all-day", itemID: "private-all-day", calendarID: "test-readonly",
+            title: "Private all-day reminder", start: start, end: end.addingTimeInterval(-1), allDay: true, timeZone: zone.identifier)
+        let meeting = CalendarEventSnapshot(eventID: "meeting", itemID: "meeting", calendarID: "test-work", title: "会议",
+            start: start.addingTimeInterval(10 * 3600), end: start.addingTimeInterval(11 * 3600))
+        var free = meeting; free.eventID = "free"; free.blocksTime = false
+        var fullDayTimed = meeting; fullDayTimed.start = start; fullDayTimed.end = start.addingTimeInterval(86400)
+        let fullRange = DateInterval(start: start, end: end)
+        let scenarios: [([CalendarEventSnapshot], [DateInterval])] = [
+            ([], [fullRange]), ([allDay], [fullRange]), ([allDay, free], [fullRange]),
+            ([allDay, meeting], [DateInterval(start: start, end: meeting.start), DateInterval(start: meeting.end, end: end)]),
+            ([allDay, fullDayTimed], [DateInterval(start: fullDayTimed.end, end: end)])
+        ]
+        for (events, expected) in scenarios {
+            let controller = try planningController(events: events, range: fullRange, timeZone: zone)
+            controller.advancePlanning(); controller.allowExtraction(); try await waitForOperation(controller)
+            XCTAssertNil(controller.errorMessage)
+            let raw = try XCTUnwrap(PlanningNativeTransport.requests.last)
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(raw.utf8)) as? [String: Any])
+            let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+            let input = try XCTUnwrap(messages.last?["content"] as? String)
+            let context = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any])
+            let intervals = try XCTUnwrap(context["availableIntervals"] as? [[String: String]])
+            let iso = ISO8601DateFormatter()
+            let actual = try intervals.map { value in
+                DateInterval(start: try XCTUnwrap(value["start"].flatMap(iso.date)), end: try XCTUnwrap(value["end"].flatMap(iso.date)))
+            }
+            XCTAssertEqual(actual, expected)
+            XCTAssertFalse(raw.contains(allDay.title)); XCTAssertFalse(raw.contains(allDay.eventID))
+            let visible = try await controller.environment.calendars.events(in: fullRange)
+            XCTAssertEqual(visible.filter(\.allDay), events.filter(\.allDay), "全天日程仍应能被日历读取和显示")
+        }
+    }
+
+    @MainActor func testPlanningAllDayProposalsDoNotConflictDuringGenerationEditingOrSave() async throws {
+        let zone = TimeZone(identifier: "Asia/Shanghai")!
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone
+        let start = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: .now))!
+        let end = calendar.date(byAdding: .day, value: 1, to: start)!
+        let range = DateInterval(start: start, end: end), iso = ISO8601DateFormatter()
+        let meetingStart = start.addingTimeInterval(10 * 3600), meetingEnd = start.addingTimeInterval(11 * 3600)
+        let allDay = CalendarEventSnapshot(eventID: "all-day", itemID: "all-day", calendarID: "test-work",
+            title: "已有全天提醒", start: start, end: end, allDay: true, timeZone: zone.identifier)
+        let meeting = CalendarEventSnapshot(eventID: "meeting", itemID: "meeting", calendarID: "test-work",
+            title: "已有会议", start: meetingStart, end: meetingEnd)
+        let proposals: [[String: Any]] = [
+            ["title": "全天纪念", "start": CivilDate(start, timeZone: zone).description, "end": CivilDate(end, timeZone: zone).description, "allDay": true],
+            ["title": "上午阅读", "start": iso.string(from: meetingStart), "end": iso.string(from: meetingEnd), "allDay": false],
+            ["title": "午间阅读", "start": iso.string(from: start.addingTimeInterval(12 * 3600)), "end": iso.string(from: start.addingTimeInterval(13 * 3600)), "allDay": false]
+        ]
+        let response = String(decoding: try JSONSerialization.data(withJSONObject: ["kind": "proposal", "message": "已安排", "events": proposals]), as: UTF8.self)
+        for hasTimedConflict in [false, true] {
+            let controller = try planningController(events: hasTimedConflict ? [allDay, meeting] : [allDay], range: range, timeZone: zone, response: response)
+            controller.advancePlanning(); controller.allowExtraction(); try await waitForOperation(controller)
+            XCTAssertNil(controller.errorMessage); XCTAssertEqual(controller.session.drafts.count, 3)
+            guard controller.session.drafts.count == 3 else { continue }
+            XCTAssertFalse(controller.session.drafts[0].needsReview)
+            XCTAssertEqual(controller.session.drafts[1].needsReview, hasTimedConflict)
+            XCTAssertFalse(controller.session.drafts[2].needsReview)
+            if hasTimedConflict {
+                controller.saveSelected(); try await waitForOperation(controller)
+                let review = try XCTUnwrap(controller.reviewDraft)
+                XCTAssertEqual(review.title, "上午阅读")
+                XCTAssertTrue(review.reviewNotes.contains { $0.contains("已有会议") })
+                XCTAssertFalse(review.reviewNotes.contains { $0.contains("已有全天提醒") || $0.contains("全天纪念") })
+                XCTAssertEqual(controller.session.savedCount, 0)
+                continue
+            }
+            // Editing two timed suggestions into a conflict must still require review.
+            let original = controller.session.drafts[2]
+            controller.session.drafts[2].start = meetingStart.addingTimeInterval(1800)
+            controller.saveSelected(); try await waitForOperation(controller)
+            XCTAssertNotNil(controller.review); XCTAssertEqual(controller.session.savedCount, 0)
+            XCTAssertTrue(try XCTUnwrap(controller.reviewDraft).reviewNotes.contains { $0.contains("本次安排") })
+            controller.cancelReview(); controller.session.drafts[2] = original
+            controller.saveSelected(); try await waitForOperation(controller)
+            XCTAssertNil(controller.review); XCTAssertNil(controller.errorMessage)
+            XCTAssertEqual(controller.session.savedCount, 3)
+            XCTAssertTrue(controller.session.drafts[0].isAllDay)
+        }
+    }
+
+    @MainActor func testRestartPlanningPreservesRangeAndCalendarsButClearsGoalAnswersAndDrafts() throws {
+        let start = Date.now.addingTimeInterval(86400), end = start.addingTimeInterval(3 * 86400)
+        let controller = try planningController(events: [], range: DateInterval(start: start, end: end), timeZone: TimeZone(identifier: "Asia/Shanghai")!)
+        var preferences = controller.environment.preferences.calendarPreferences
+        preferences.planningCalendars = []
+        controller.environment.preferences.setCalendarPreferences(preferences)
+        controller.session.planning?.turns = [PlanningTurn(role: "user", text: "每次半小时")]
+        controller.session.planning?.hasProposal = true
+        controller.session.hasParsed = true
+        controller.session.drafts = [reviewEvent("旧方案")]
+        let original = controller.session
+        controller.restartPlanning()
+        XCTAssertNotEqual(controller.session.id, original.id)
+        XCTAssertTrue(controller.session.text.isEmpty)
+        XCTAssertEqual(controller.session.displayTitle, "未填写的安排")
+        XCTAssertEqual(controller.session.planning?.goal, "")
+        XCTAssertEqual(controller.session.planning?.turns, [])
+        XCTAssertEqual(controller.session.planning?.start, start)
+        XCTAssertEqual(controller.session.planning?.end, end)
+        XCTAssertEqual(controller.session.referenceTimeZone, original.referenceTimeZone)
+        XCTAssertTrue(controller.session.drafts.isEmpty)
+        XCTAssertFalse(controller.session.hasParsed)
+        XCTAssertEqual(controller.environment.preferences.calendarPreferences.planningCalendars, [])
+        XCTAssertTrue(PlanningNativeTransport.requests.isEmpty)
+        let stored = try XCTUnwrap(controller.environment.store).all()
+        XCTAssertEqual(stored.first { $0.id == original.id }?.drafts, original.drafts)
+        XCTAssertEqual(stored.first { $0.id == controller.session.id }?.planning, controller.session.planning)
+        // Editing the next goal at home must retain the explicitly selected range.
+        controller.session.text = "学习摄影"
+        controller.openPlanning()
+        XCTAssertEqual(controller.session.planning?.goal, "学习摄影")
+        XCTAssertEqual(controller.session.planning?.start, start)
+        XCTAssertEqual(controller.session.planning?.end, end)
+    }
+
+    @MainActor func testPlanningWithNoReferenceCalendarsSendsFullAvailability() async throws {
+        let start = Date.now.addingTimeInterval(86400), end = start.addingTimeInterval(86400)
+        let event = CalendarEventSnapshot(eventID: "busy", itemID: "busy", calendarID: "test-work", title: "忙碌", start: start, end: end)
+        let controller = try planningController(events: [event], range: DateInterval(start: start, end: end), timeZone: .current)
+        var preferences = controller.environment.preferences.calendarPreferences
+        preferences.planningCalendars = []
+        controller.environment.preferences.setCalendarPreferences(preferences)
+        controller.advancePlanning(); controller.allowExtraction(); try await waitForOperation(controller)
+        XCTAssertNil(controller.errorMessage)
+        let request = try XCTUnwrap(PlanningNativeTransport.requests.last)
+        let body = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(request.utf8)) as? [String: Any])
+        let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+        let input = try XCTUnwrap(messages.last?["content"] as? String)
+        let context = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any])
+        let intervals = try XCTUnwrap(context["availableIntervals"] as? [[String: String]])
+        XCTAssertEqual(intervals.count, 1)
+        let iso = ISO8601DateFormatter()
+        XCTAssertEqual(try XCTUnwrap(intervals.first?["start"].flatMap(iso.date)).timeIntervalSince1970, start.timeIntervalSince1970, accuracy: 1)
+        XCTAssertEqual(try XCTUnwrap(intervals.first?["end"].flatMap(iso.date)).timeIntervalSince1970, end.timeIntervalSince1970, accuracy: 1)
+    }
+
+    @MainActor private func planningController(events: [CalendarEventSnapshot], range: DateInterval, timeZone: TimeZone,
+                                               response: String? = nil) throws -> ImportController {
+        let preferences = Preferences(defaults: try consentDefaults())
+        let configuration = APIConfiguration(baseURL: "https://planning.example/v1", model: "test-model")
+        try preferences.saveProfile(id: nil, name: "测试安排", configuration: configuration, key: "fixture-key")
+        let credential = try XCTUnwrap(preferences.activeProfile?.credentialID)
+        addTeardownBlock { try? KeychainStore.saveProfileKey("", id: credential, synchronizable: false) }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [PlanningNativeTransport.self]
+        let transport = URLSession(configuration: config)
+        addTeardownBlock { transport.invalidateAndCancel() }
+        PlanningNativeTransport.reset(response: response)
+        let environment = AppEnvironment(preferences: preferences, calendars: CalendarService(useDemo: true, fixtureEvents: events),
+            store: try SessionStore(inMemory: true), consent: ExtractionConsentStore(defaults: try consentDefaults()),
+            llmClient: LLMClient(session: transport), modelJobs: ModelJobCenter(platformEnabled: false))
+        var session = ImportSession(); session.text = "安排全天纪念和阅读"; session.referenceTimeZone = timeZone.identifier
+        var plan = PlanningConversation(goal: session.text, now: range.start, timeZone: timeZone)
+        plan.start = range.start; plan.end = range.end; session.planning = plan
+        return ImportController(environment: environment, session: session)
     }
 
     @MainActor func testCalendarQueriesIncludeReadonlyAndRespectEmptySelectionAndBoundaries() async throws {
@@ -753,8 +939,10 @@ private final class ConsentTransport: URLProtocol {
 private final class PlanningNativeTransport: URLProtocol {
     private static let lock = NSLock()
     private static var bodies: [String] = []
+    private static let question = #"{"kind":"question","message":"每天什么时候方便？","options":["晚上","下午"]}"#
+    private static var content = question
     static var requests: [String] { lock.lock(); defer { lock.unlock() }; return bodies }
-    static func reset() { lock.lock(); bodies = []; lock.unlock() }
+    static func reset(response: String? = nil) { lock.lock(); bodies = []; content = response ?? question; lock.unlock() }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {
@@ -764,8 +952,7 @@ private final class PlanningNativeTransport: URLProtocol {
             var buffer = [UInt8](repeating: 0, count: 4096)
             while stream.hasBytesAvailable { let count = stream.read(&buffer, maxLength: buffer.count); if count <= 0 { break }; data.append(buffer, count: count) }
         }
-        Self.lock.lock(); Self.bodies.append(String(decoding: data, as: UTF8.self)); Self.lock.unlock()
-        let content = #"{"kind":"question","message":"每天什么时候方便？","options":["晚上","下午"]}"#
+        Self.lock.lock(); Self.bodies.append(String(decoding: data, as: UTF8.self)); let content = Self.content; Self.lock.unlock()
         let body = try! JSONSerialization.data(withJSONObject: ["choices": [["message": ["content": content], "finish_reason": "stop"]]])
         client?.urlProtocol(self, didReceive: HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!, cacheStoragePolicy: .notAllowed)
         client?.urlProtocol(self, didLoad: body); client?.urlProtocolDidFinishLoading(self)

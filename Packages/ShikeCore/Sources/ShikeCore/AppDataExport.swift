@@ -126,6 +126,7 @@ public struct AppDataExport: Codable, Sendable {
     public struct Session: Codable, Sendable {
         public let id: UUID
         public let createdAt: Date
+        public let referenceDate: Date?
         public let referenceTimeZone: String
         public let source: String
         public let text: String
@@ -135,6 +136,7 @@ public struct AppDataExport: Codable, Sendable {
         public let planning: Conversation?
         init(_ v: ImportSession, calendars: [String: CalendarReference]) {
             id = v.id; createdAt = v.createdAt; referenceTimeZone = v.referenceTimeZone; source = v.source; text = v.text
+            referenceDate = v.referenceDate
             hasParsed = v.hasParsed; forcedCategory = v.forcedCategory
             drafts = v.drafts.map { Draft($0, calendars: calendars) }; planning = v.planning.map(Conversation.init)
         }

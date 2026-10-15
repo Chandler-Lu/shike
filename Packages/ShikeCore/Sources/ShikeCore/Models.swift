@@ -247,6 +247,9 @@ public struct EventDraft: Codable, Identifiable, Equatable, Sendable {
 public struct ImportSession: Codable, Identifiable, Equatable, Sendable {
     public var id = UUID()
     public var createdAt = Date()
+    /// Optional for older records; refreshing interpretation must not change creation order.
+    public var referenceDate: Date?
+    public var effectiveReferenceDate: Date { referenceDate ?? createdAt }
     public var referenceTimeZone = TimeZone.current.identifier
     public var source = "文字"
     public var text = ""
@@ -258,7 +261,9 @@ public struct ImportSession: Codable, Identifiable, Equatable, Sendable {
     public init(source: String = "文字") { self.source = source }
     public var savedCount: Int { drafts.filter(\.isSaved).count }
     public var displayTitle: String {
-        drafts.first?.title.isEmpty == false ? drafts[0].title : String(text.prefix(32))
+        if drafts.first?.title.isEmpty == false { return drafts[0].title }
+        if text.isEmpty, planning != nil { return "未填写的安排" }
+        return String(text.prefix(32))
     }
 }
 

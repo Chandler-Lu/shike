@@ -30,6 +30,33 @@ public struct CalendarSummaryInput: Codable, Sendable {
     }
 }
 
+/// A frozen, allowlisted calendar snapshot plus the conversation about it.
+/// Older task records can still be discussed using their summary alone.
+public struct CalendarSummaryContext: Codable, Sendable {
+    public struct Exchange: Codable, Sendable {
+        public let question: String?
+        public let answer: CalendarSummary
+        public init(question: String?, answer: CalendarSummary) {
+            self.question = question; self.answer = answer
+        }
+    }
+    public let title: String
+    public let input: CalendarSummaryInput?
+    public var exchanges: [Exchange]
+    public init(title: String, input: CalendarSummaryInput?, exchanges: [Exchange] = []) {
+        self.title = title; self.input = input; self.exchanges = exchanges
+    }
+    public func encoded(question: String) throws -> String {
+        let clean = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, clean.count <= 4000 else { throw ShikeError.message("请填写追问内容，最多 4000 字。") }
+        _ = try input?.encoded()
+        struct Payload: Encodable { let context: CalendarSummaryContext; let question: String }
+        let data = try JSONEncoder().encode(Payload(context: self, question: clean))
+        guard data.count <= 240_000 else { throw ShikeError.message("这次对话内容较多，请重新总结后继续提问。") }
+        return String(decoding: data, as: UTF8.self)
+    }
+}
+
 public struct CalendarSummary: Codable, Equatable, Sendable {
     public var overview: String
     public var agenda: [String]

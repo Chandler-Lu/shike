@@ -59,6 +59,7 @@ public struct AppDataImport: Sendable {
         backup.importSessions.map { value in
             var session = ImportSession(source: value.source)
             session.id = value.id; session.createdAt = value.createdAt; session.referenceTimeZone = value.referenceTimeZone
+            session.referenceDate = value.referenceDate
             session.text = value.text; session.hasParsed = value.hasParsed; session.forcedCategory = value.forcedCategory
             session.drafts = value.drafts.map { source in
                 var draft = EventDraft()

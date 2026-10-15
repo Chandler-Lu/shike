@@ -272,7 +272,7 @@ struct CountdownWidgetContent: View {
             } else if entry.hasSpecifiedDays {
                 header(name: name!, total: entries.count)
                 specified(entries).frame(maxHeight: .infinity)
-                yearFooter(remaining: 0)
+                yearFooter()
             } else {
                 header(name: name!, total: entries.count)
                 if !selection.upcoming.isEmpty && !selection.elapsed.isEmpty {
@@ -286,7 +286,7 @@ struct CountdownWidgetContent: View {
                                   elapsed: selection.upcoming.isEmpty)
                         .frame(maxHeight: .infinity)
                 }
-                yearFooter(remaining: selection.remainingCount)
+                yearFooter()
             }
         }
         .foregroundStyle(ink)
@@ -448,13 +448,13 @@ struct CountdownWidgetContent: View {
             .font(.system(size: 10)).monospacedDigit().foregroundStyle(secondaryInk).lineLimit(1).minimumScaleFactor(0.8)
     }
 
-    private func yearFooter(remaining: Int) -> some View {
+    private func yearFooter() -> some View {
         let progress = YearProgress(now: entry.date, timeZone: .current)
         return VStack(alignment: .leading, spacing: 4) {
             HStack(spacing: 4) {
                 Text("今年已过 \(progress.elapsedDays) 天")
                 Spacer(minLength: 0)
-                Text(remaining > 0 ? "还有 \(remaining) 个日子" : progress.fraction.formatted(.percent.precision(.fractionLength(1))))
+                Text("还剩 \(progress.totalDays - progress.elapsedDays) 天")
             }.font(.system(size: 10)).foregroundStyle(secondaryInk).lineLimit(1)
             GeometryReader { proxy in
                 Capsule().fill(ink.opacity(0.08))

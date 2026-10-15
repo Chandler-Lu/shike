@@ -7,6 +7,7 @@ final class AppDataImportTests: XCTestCase {
         entry.reminder = CountdownReminder(anniversaries: true, dayInterval: 500)
         entry.includesStartDay = true; entry.targetTime = CountdownTime(hour: 13, minute: 14, second: 52)
         var session = ImportSession(); session.text = "私密原文"
+        session.referenceDate = Date(timeIntervalSince1970: 1_800_000_000)
         var draft = EventDraft(); draft.title = "会议"; draft.eventIdentifier = "DEVICE-EVENT-ID"
         draft.calendarID = "LOCAL-ID"; session.drafts = [draft]
         return AppDataExport(version: "1.0", build: "4", preferences: .init(iCloudEnabled: true, categoryRoutingEnabled: true,
@@ -23,6 +24,7 @@ final class AppDataImportTests: XCTestCase {
         XCTAssertEqual(imported.prompts.extraction, "自定义规则")
         let session = try XCTUnwrap(imported.sessions(calendars: ["NEW-ID": .init(title: "工作", account: "iCloud")]).first)
         let draft = try XCTUnwrap(session.drafts.first)
+        XCTAssertEqual(session.effectiveReferenceDate, Date(timeIntervalSince1970: 1_800_000_000))
         XCTAssertEqual(draft.calendarID, "NEW-ID"); XCTAssertNil(draft.eventIdentifier)
         XCTAssertFalse(draft.isSaved); XCTAssertFalse(draft.selected); XCTAssertTrue(draft.needsReview)
         XCTAssertEqual(draft.restoredFromSavedEvent, true)
@@ -64,8 +66,12 @@ final class AppDataImportTests: XCTestCase {
         var calendar = preferences["calendar"] as! [String: Any]
         calendar.removeValue(forKey: "showCountdowns"); calendar.removeValue(forKey: "countdownLayout")
         preferences["calendar"] = calendar; json["preferences"] = preferences
+        var sessions = json["importSessions"] as! [[String: Any]]
+        sessions[0].removeValue(forKey: "referenceDate"); json["importSessions"] = sessions
         let imported = try AppDataImport(data: JSONSerialization.data(withJSONObject: json))
         XCTAssertFalse(imported.backup.countdowns[0].countdown.includesStartDay ?? false)
         XCTAssertNil(imported.backup.countdowns[0].countdown.targetTime)
+        let session = try XCTUnwrap(imported.sessions(calendars: [:]).first)
+        XCTAssertNil(session.referenceDate); XCTAssertEqual(session.effectiveReferenceDate, session.createdAt)
     }
 }

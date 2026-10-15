@@ -23,7 +23,9 @@ struct CalendarScreen: View {
     @State private var newEvent: EventDraft?
     @State private var drag: CalendarDragSelection?
     @State private var ignoreEventTapsUntil = Date.distantPast
-    @State private var summaryRequest: CalendarSummaryRequest?
+    @StateObject private var summaryController = CalendarSummaryController()
+    @State private var showsSummary = false
+    @State private var screenVisible = false
     @State private var allDayExpanded = false
     private let hourHeight: CGFloat = 58
     @ScaledMetric(relativeTo: .caption) private var allDayRowHeight: CGFloat = 24
@@ -61,11 +63,14 @@ struct CalendarScreen: View {
                     .accessibilityLabel("日历与时区").accessibilityIdentifier("calendarFilters")
             } }
             .task(id: queryKey) { await load() }
-            .onDisappear { drag = nil; ignoreEventTapsUntil = .distantPast }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { calendars.refresh() } }
-            .sheet(item: $summaryRequest) { request in
-                CalendarSummaryView(request: request, preferences: preferences)
-                    .presentationDetents([.medium, .large]).presentationDragIndicator(.visible).workspaceSheet()
+            .onAppear { screenVisible = true; presentFinishedSummary() }
+            .onDisappear { screenVisible = false; drag = nil; ignoreEventTapsUntil = .distantPast }
+            .onChange(of: scenePhase) { _, phase in if phase == .active { calendars.refresh(); presentFinishedSummary() } }
+            .onChange(of: summaryController.needsPresentation) { _, _ in presentFinishedSummary() }
+            .onChange(of: summaryPresentationBlocked) { _, blocked in if !blocked { presentFinishedSummary() } }
+            .sheet(isPresented: $showsSummary, onDismiss: presentFinishedSummary) {
+                CalendarSummaryView(controller: summaryController, preferences: preferences)
+                    .workspaceSheet()
             }
             .sheet(item: $newEvent) { draft in
                 DraftEditor(draft: draft, calendars: calendars, calendarCreation: true) { value in
@@ -341,9 +346,19 @@ struct CalendarScreen: View {
         newEvent = draft; error = nil
     }
     private func summarizeVisibleEvents() {
+        if summaryController.running { showsSummary = true; return }
         let range = DateInterval(start: days[0], end: calendar.date(byAdding: .day, value: count, to: days[0])!)
         let title = days[0].formatted(.dateTime.month().day().inTimeZone(zone)) + (count == 1 ? "的安排" : " – " + days.last!.formatted(.dateTime.month().day().inTimeZone(zone)) + "的安排")
-        summaryRequest = CalendarSummaryRequest(title: title, input: CalendarSummaryInput(events: events, range: range, timeZone: zone))
+        summaryController.generate(CalendarSummaryRequest(title: title, input: CalendarSummaryInput(events: events, range: range, timeZone: zone)), preferences: preferences)
+        showsSummary = true
+    }
+    private var summaryPresentationBlocked: Bool {
+        filter || selected != nil || newEvent != nil || dayList != nil || selectedCountdown != nil
+    }
+    private func presentFinishedSummary() {
+        guard summaryController.shouldPresentResult, screenVisible, scenePhase == .active,
+              !showsSummary, !summaryPresentationBlocked else { return }
+        showsSummary = true
     }
     private func timedEvent(at point: CGPoint, geometry: CalendarTimelineGeometry) -> CalendarEventSnapshot? {
         let index = geometry.dayIndex(at: point), day = days[index]

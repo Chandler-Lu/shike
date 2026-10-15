@@ -135,10 +135,10 @@ struct SettingsView: View {
                     }.buttonStyle(InkButtonStyle(prominent: false))
                 }
                 Divider()
-                Toggle("按日程类别自动选择日历", isOn: Binding(get: { preferences.categoryRoutingEnabled }, set: { preferences.setCategoryRouting($0) }))
+                Toggle("日程类别判断", isOn: Binding(get: { preferences.categoryRoutingEnabled }, set: { preferences.setCategoryRouting($0) }))
                     .padding(.trailing, 4)
                     .font(.subheadline).tint(Notebook.accent).accessibilityIdentifier("categoryRouting")
-                Text(preferences.categoryRoutingEnabled ? "指定对应日历时优先使用；未指定则由 AI 按日历名称匹配，例如出行安排优选“个人出行”。" : "关闭时，新日程统一使用默认日历。")
+                Text(preferences.categoryRoutingEnabled ? "按日程类别自动选择日历。指定对应日历时优先使用；未指定则由 AI 按日历名称匹配，例如出行安排优选“个人出行”。" : "关闭时，新日程统一使用默认日历。")
                     .font(.caption).foregroundStyle(Notebook.secondaryInk).fixedSize(horizontal: false, vertical: true)
                 if preferences.categoryRoutingEnabled {
                     if calendars.authorized {

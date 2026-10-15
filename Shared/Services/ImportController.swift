@@ -71,12 +71,19 @@ struct DraftReview {
     }
     func persist() throws {
         persistence?.cancel()
-        guard !session.text.isEmpty || !session.drafts.isEmpty || !session.pendingImages.isEmpty else { return }
+        guard !session.text.isEmpty || !session.drafts.isEmpty || !session.pendingImages.isEmpty || session.planning != nil else { return }
         guard let store = environment.store else { throw ShikeError.message(environment.startupError ?? "存储不可用") }
         try store.save(session)
     }
     func persistReportingError() {
         do { try persist() } catch { errorMessage = "草稿保存失败：\(error.localizedDescription)" }
+    }
+
+    func refreshReferenceDate(now: Date = .now) {
+        guard !isBusy, review == nil, consentRequest == nil, session.savedCount == 0 else { return }
+        session.referenceDate = now
+        persistReportingError()
+        information = session.hasParsed ? "参考时间已更新，重新提取时生效。" : "参考时间已更新为当前时间。"
     }
 
     func startNew() {
@@ -252,7 +259,7 @@ struct DraftReview {
         let identifiers = Dictionary(uniqueKeysWithValues: zip(candidates.map(\.id), calendars.map(\.id)))
         let session = session, prompts = preferences.promptSettings, client = environment.llmClient
         return { observer in
-        let drafts = try await client.extract(text: session.text, referenceDate: session.createdAt,
+        let drafts = try await client.extract(text: session.text, referenceDate: session.effectiveReferenceDate,
                                      timeZone: TimeZone(identifier: session.referenceTimeZone) ?? .current,
                                      configuration: configuration, apiKey: apiKey,
                                      calendars: candidates,
@@ -503,12 +510,33 @@ struct DraftReview {
 }
 
 extension ImportController {
+    func restartPlanning() {
+        guard !isBusy, review == nil, consentRequest == nil, let previous = session.planning else { return }
+        guard !previous.goal.isEmpty || !previous.turns.isEmpty || !session.drafts.isEmpty else { return }
+        do {
+            try persist()
+            var fresh = ImportSession()
+            fresh.source = "帮我安排"
+            fresh.referenceTimeZone = session.referenceTimeZone
+            fresh.forcedCategory = session.forcedCategory
+            var plan = PlanningConversation(goal: "", timeZone: TimeZone(identifier: fresh.referenceTimeZone) ?? .current)
+            plan.start = previous.start; plan.end = previous.end
+            fresh.planning = plan
+            // Keep prior drafts in history; the new goal starts a separate conversation.
+            guard let store = environment.store else { throw ShikeError.message("存储不可用") }
+            try store.save(fresh)
+            session = fresh
+            conflictAcknowledgements.removeAll(); conflictSnapshot.removeAll()
+            information = nil; errorMessage = nil; planningIntent = true
+        } catch { errorMessage = error.localizedDescription }
+    }
+
     func openPlanning() {
         guard !isBusy, review == nil, consentRequest == nil else { return }
         let text = session.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         do {
-            if session.savedCount > 0 || (session.planning == nil && session.hasParsed) || (session.planning != nil && session.planning?.goal != text) {
+            if session.savedCount > 0 || (session.planning == nil && session.hasParsed) || (session.planning?.turns.isEmpty == false && session.planning?.goal != text) {
                 let category = session.forcedCategory
                 try persist()
                 session = ImportSession(); session.text = text; session.forcedCategory = category
@@ -516,6 +544,8 @@ extension ImportController {
             if session.planning == nil {
                 session.planning = PlanningConversation(goal: text, timeZone: TimeZone(identifier: session.referenceTimeZone) ?? .current)
                 session.source = "帮我安排"
+            } else if session.planning?.turns.isEmpty == true {
+                session.planning?.goal = text
             }
             try persist()
             showsPlanning = true
@@ -566,7 +596,7 @@ extension ImportController {
                     }
                     events = try await environment.calendars.events(in: DateInterval(start: range.start.addingTimeInterval(-172800), end: range.end.addingTimeInterval(172800)), calendarIDs: ids)
                 } else { events = nil }
-                let free = events.map { Scheduling.freeIntervals(in: range, busy: $0.filter(\.blocksTime).map { $0.interval(in: zone) }) }
+                let free = events.map { Scheduling.freeIntervals(in: range, busy: $0.filter(\.blocksPlanningTime).map { $0.interval(in: zone) }) }
                 guard (preferences.activeProfile?.configuration ?? preferences.configuration) == configuration else {
                     throw ShikeError.message("接口已变化，请重新发起安排。")
                 }
@@ -612,11 +642,13 @@ extension ImportController {
                         return draft
                     }
                     for index in updated.drafts.indices {
-                        guard let start = updated.drafts[index].start, let end = updated.drafts[index].end, end > start else { continue }
+                        guard !updated.drafts[index].isAllDay,
+                              let start = updated.drafts[index].start, let end = updated.drafts[index].end, end > start else { continue }
                         let interval = DateInterval(start: start, end: end)
-                        let existingConflict = events?.contains { $0.blocksTime && Scheduling.overlaps($0.interval(in: zone), interval) } == true
+                        let existingConflict = events?.contains { $0.blocksPlanningTime && Scheduling.overlaps($0.interval(in: zone), interval) } == true
                         let proposalConflict = updated.drafts.enumerated().contains { otherIndex, other in
-                            guard index != otherIndex, let otherStart = other.start, let otherEnd = other.end, otherEnd > otherStart else { return false }
+                            guard index != otherIndex, !other.isAllDay,
+                                  let otherStart = other.start, let otherEnd = other.end, otherEnd > otherStart else { return false }
                             return Scheduling.overlaps(DateInterval(start: otherStart, end: otherEnd), interval)
                         }
                         if existingConflict || proposalConflict {
@@ -674,12 +706,12 @@ extension ImportController {
         conflictSnapshot = try await environment.calendars.events(in: DateInterval(start: plan.start.addingTimeInterval(-172800), end: plan.end.addingTimeInterval(172800)), calendarIDs: ids)
     }
     private func overlaps(for draft: EventDraft) -> [(String, String)] {
-        guard let start = draft.start, let end = draft.end, end > start else { return [] }
+        guard !draft.isAllDay, let start = draft.start, let end = draft.end, end > start else { return [] }
         let interval = DateInterval(start: start, end: end)
-        var result = conflictSnapshot.filter { $0.blocksTime && Scheduling.overlaps($0.interval(in: TimeZone(identifier: session.referenceTimeZone) ?? .current), interval) && $0.eventID != draft.eventIdentifier }
+        var result = conflictSnapshot.filter { $0.blocksPlanningTime && Scheduling.overlaps($0.interval(in: TimeZone(identifier: session.referenceTimeZone) ?? .current), interval) && $0.eventID != draft.eventIdentifier }
             .map { ("event:\($0.id):\($0.end.timeIntervalSinceReferenceDate)", "与已有安排「\($0.title)」时间重叠。确认此重叠后仍可加入。") }
         result += session.drafts.filter {
-            $0.id != draft.id && $0.selected && !$0.isSaved && $0.start != nil && $0.end != nil && $0.end! > $0.start!
+            $0.id != draft.id && !$0.isAllDay && $0.selected && !$0.isSaved && $0.start != nil && $0.end != nil && $0.end! > $0.start!
                 && Scheduling.overlaps(DateInterval(start: $0.start!, end: $0.end!), interval)
         }.map { ("draft:\($0.id):\($0.start!.timeIntervalSinceReferenceDate):\($0.end!.timeIntervalSinceReferenceDate)", "与本次安排「\($0.title)」时间重叠。确认此重叠后仍可加入。") }
         return result.sorted { $0.0 < $1.0 }

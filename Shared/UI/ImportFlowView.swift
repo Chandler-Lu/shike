@@ -33,20 +33,28 @@ struct ImportFlowView: View {
                                      showsAPIProfilePicker: showsAPIProfilePicker,
                                      isBusy: controller.isBusy || isLoadingInput)
                     ZStack(alignment: .topLeading) {
-                        if controller.session.text.isEmpty {
-                            Text(sourcePlaceholder)
-                                .foregroundStyle(Notebook.secondaryInk.opacity(0.85)).padding(.top, 9).padding(.leading, 4)
-                        }
+                        Text(sourcePlaceholder)
+                            .foregroundStyle(Notebook.secondaryInk.opacity(0.85)).padding(.top, 9).padding(.leading, 4)
+                            .opacity(controller.session.text.isEmpty ? 1 : 0).allowsHitTesting(false)
+                            .accessibilityHidden(!controller.session.text.isEmpty)
                         TextEditor(text: $controller.session.text)
+                            .foregroundColor(Notebook.ink).tint(Notebook.accent)
                             .scrollContentBackground(.hidden).frame(minHeight: 130, maxHeight: 200)
                             .focused($textFocused).accessibilityIdentifier(isExtension ? "share-sourceText" : "sourceText")
                             .disabled(sourceEditingDisabled)
                     }.font(.body)
                     HStack(spacing: 5) {
-                        HStack(alignment: .top, spacing: 5) {
-                            Image(systemName: "clock")
-                            Text("相对日期按 \(controller.session.createdAt.formatted(.dateTime.month().day().hour().minute())) 理解")
-                        }.font(.caption).foregroundStyle(Notebook.secondaryInk)
+                        Button { controller.refreshReferenceDate() } label: {
+                            HStack(alignment: .top, spacing: 5) {
+                                Image(systemName: "clock")
+                                Text("相对日期按 \(referenceDateText) 理解")
+                                    .multilineTextAlignment(.leading)
+                            }.frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                        }.buttonStyle(.plain).font(.caption).foregroundStyle(Notebook.secondaryInk)
+                            .disabled(sourceEditingDisabled || controller.review != nil || controller.consentRequest != nil)
+                            .accessibilityHint("点击更新为当前时间，之后提取时生效")
+                            .accessibilityValue(controller.session.effectiveReferenceDate.formatted(.iso8601))
+                            .accessibilityIdentifier("refreshReferenceDate")
                         Spacer(minLength: 0)
                         if let onVoiceInput {
                             Button { textFocused = false; onVoiceInput() } label: {
@@ -203,11 +211,21 @@ struct ImportFlowView: View {
         .sheet(isPresented: Binding(get: { controller.showsPlanning && !isPlanningContent && !isExtension }, set: { if !$0 && !isPlanningContent { controller.showsPlanning = false } })) {
             PlanningView(controller: controller, calendars: calendars, preferences: controller.environment.preferences).workspaceSheet()
         }
-        .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { textFocused = false } } }
+        .toolbar {
+            if !isPlanningContent && !controller.showsPlanning {
+                ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { textFocused = false } }
+            }
+        }
     }
 
     private var sourceEditingDisabled: Bool {
         controller.isBusy || isLoadingInput || controller.session.savedCount > 0
+    }
+
+    private var referenceDateText: String {
+        let format = Date.FormatStyle(timeZone: TimeZone(identifier: controller.session.referenceTimeZone) ?? .current)
+            .month().day().hour().minute()
+        return controller.session.effectiveReferenceDate.formatted(format)
     }
 
     private var sourcePlaceholder: String {

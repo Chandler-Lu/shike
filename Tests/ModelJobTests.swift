@@ -3,6 +3,119 @@ import ShikeCore
 @testable import Shike
 
 final class ModelJobTests: XCTestCase {
+    @MainActor func testSummaryFollowUpRestoresSnapshotAndEveryAnswerFromJournal() async throws {
+        let folder = try directory()
+        let center = ModelJobCenter(directory: folder, platformEnabled: false, isBackground: { false })
+        let controller = CalendarSummaryController(jobs: center)
+        let request = CalendarSummaryRequest(title: "今天", input: CalendarSummaryInput(events: [], range: DateInterval(start: .now, duration: 86400), timeZone: TimeZone(identifier: "Asia/Shanghai")!))
+        let initial = CalendarSummary(overview: "原始总结", agenda: [], attention: [], suggestions: [])
+        await controller.run(request) { _ in initial }.value
+        let firstRecord = try XCTUnwrap(center.record(try XCTUnwrap(controller.jobID)))
+        let reopened = CalendarSummaryController(jobs: center, restored: firstRecord)
+        XCTAssertEqual(reopened.summary, initial)
+        XCTAssertEqual(reopened.context?.input?.timeZone, "Asia/Shanghai")
+        var background = true, deliveries = 0
+        center.isBackground = { background }; center.deliver = { _ in deliveries += 1 }
+        let followup = CalendarSummary(overview: "追问的答复", agenda: [], attention: [], suggestions: ["休息一下"])
+        await reopened.execute(context: try XCTUnwrap(reopened.context), question: "可以休息多久？") { _ in followup }.value
+        let id = try XCTUnwrap(reopened.jobID)
+        XCTAssertEqual(deliveries, 1)
+        XCTAssertTrue(reopened.needsPresentation)
+        XCTAssertEqual(reopened.context?.exchanges.count, 2)
+        let loadedCenter = ModelJobCenter(directory: folder, platformEnabled: false, isBackground: { false })
+        let restored = CalendarSummaryController(jobs: loadedCenter, restored: try XCTUnwrap(loadedCenter.record(id)))
+        XCTAssertEqual(restored.summary, followup)
+        XCTAssertEqual(restored.context?.exchanges.first?.answer, initial)
+        XCTAssertEqual(restored.context?.exchanges.last?.question, "可以休息多久？")
+        XCTAssertEqual(restored.context?.input?.rangeStart, request.input.rangeStart)
+        background = false; restored.setVisible(true)
+        XCTAssertEqual(loadedCenter.record(id)?.seen, true)
+        let task = restored.execute(context: try XCTUnwrap(restored.context), question: "再调整一下") { _ in
+            try await Task.sleep(for: .seconds(60)); return initial
+        }
+        restored.cancel(); await task.value
+        XCTAssertEqual(restored.summary, followup, "取消追问不能清空已完成的回答")
+        XCTAssertEqual(restored.pendingQuestion, "再调整一下")
+        let cancelled = CalendarSummaryController(jobs: loadedCenter, restored: try XCTUnwrap(loadedCenter.record(try XCTUnwrap(restored.jobID))))
+        XCTAssertEqual(cancelled.summary, followup)
+        XCTAssertEqual(cancelled.pendingQuestion, "再调整一下")
+    }
+
+    @MainActor func testSummaryWithoutSnapshotStillOpensAndCanBeDiscussed() throws {
+        let center = ModelJobCenter(directory: try directory(), platformEnabled: false)
+        let old = ModelJobRecord(id: UUID(), kind: .summary, createdAt: .now, status: .completed,
+            output: .summary(title: "旧总结", value: CalendarSummary(overview: "旧的回答", agenda: [], attention: [], suggestions: [])))
+        let restored = CalendarSummaryController(jobs: center, restored: try JSONDecoder().decode(ModelJobRecord.self, from: JSONEncoder().encode(old)))
+        XCTAssertNil(restored.context?.input)
+        XCTAssertEqual(restored.context?.title, "旧总结")
+        XCTAssertEqual(restored.summary?.overview, "旧的回答")
+        XCTAssertTrue(try XCTUnwrap(restored.context).encoded(question: "如何理解？").contains("旧的回答"))
+    }
+
+    @MainActor func testDismissedSummaryCompletesUnreadAndCanBePresentedWithoutNewRequest() async throws {
+        let folder = try directory()
+        let center = ModelJobCenter(directory: folder, platformEnabled: false, isBackground: { false })
+        let controller = CalendarSummaryController(jobs: center)
+        let request = CalendarSummaryRequest(title: "今天", input: CalendarSummaryInput(events: [], range: DateInterval(start: .now, duration: 86400), timeZone: .current))
+        let value = CalendarSummary(overview: "今天没有安排", agenda: [], attention: [], suggestions: [])
+        controller.setVisible(true)
+        let task = controller.run(request) { _ in
+            await Task.yield()
+            return value
+        }
+        controller.setVisible(false)
+        await task.value
+        let id = try XCTUnwrap(controller.jobID)
+        XCTAssertEqual(controller.summary, value)
+        XCTAssertTrue(controller.needsPresentation)
+        XCTAssertEqual(center.record(id)?.seen, false)
+        let reloaded = ModelJobCenter(directory: folder, platformEnabled: false)
+        XCTAssertEqual(reloaded.record(id)?.seen, false)
+        XCTAssertTrue(controller.shouldPresentResult)
+        center.acknowledge(id) // Reading from the task list must also prevent a duplicate popup.
+        XCTAssertFalse(controller.shouldPresentResult)
+        controller.setVisible(true)
+        XCTAssertFalse(controller.needsPresentation)
+        XCTAssertEqual(center.record(id)?.seen, true)
+        XCTAssertEqual(center.records.count, 1)
+        controller.setVisible(false)
+        XCTAssertFalse(controller.needsPresentation, "查看完再关闭，不应重复弹出")
+    }
+
+    @MainActor func testVisibleSummaryIsAcknowledgedAndCancellationDoesNotReopen() async throws {
+        let center = ModelJobCenter(directory: try directory(), platformEnabled: false, isBackground: { false })
+        let controller = CalendarSummaryController(jobs: center)
+        let request = CalendarSummaryRequest(title: "今天", input: CalendarSummaryInput(events: [], range: DateInterval(start: .now, duration: 86400), timeZone: .current))
+        controller.setVisible(true)
+        await controller.run(request) { _ in CalendarSummary(overview: "空闲", agenda: [], attention: [], suggestions: []) }.value
+        XCTAssertFalse(controller.needsPresentation)
+        XCTAssertEqual(center.record(try XCTUnwrap(controller.jobID))?.seen, true)
+        let task = controller.run(request) { _ in
+            try await Task.sleep(for: .seconds(60))
+            throw CancellationError()
+        }
+        controller.cancel(); controller.setVisible(false)
+        await task.value
+        XCTAssertFalse(controller.needsPresentation)
+        XCTAssertFalse(controller.running)
+        XCTAssertEqual(center.record(try XCTUnwrap(controller.jobID))?.status, .cancelled)
+    }
+
+    @MainActor func testBackgroundSummaryWaitsForPresentationAndNotifiesOnce() async throws {
+        var background = true, notifications = 0
+        let center = ModelJobCenter(directory: try directory(), platformEnabled: false, isBackground: { background }, deliver: { _ in notifications += 1 })
+        let controller = CalendarSummaryController(jobs: center)
+        let request = CalendarSummaryRequest(title: "今天", input: CalendarSummaryInput(events: [], range: DateInterval(start: .now, duration: 86400), timeZone: .current))
+        controller.setVisible(true)
+        await controller.run(request) { _ in CalendarSummary(overview: "空闲", agenda: [], attention: [], suggestions: []) }.value
+        XCTAssertEqual(notifications, 1)
+        XCTAssertTrue(controller.needsPresentation)
+        XCTAssertEqual(center.record(try XCTUnwrap(controller.jobID))?.seen, false)
+        background = false; controller.setVisible(true)
+        XCTAssertFalse(controller.needsPresentation)
+        XCTAssertEqual(center.record(try XCTUnwrap(controller.jobID))?.seen, true)
+    }
+
     private func directory() throws -> URL {
         let value = FileManager.default.temporaryDirectory.appendingPathComponent("ModelJobTests-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: value, withIntermediateDirectories: true)

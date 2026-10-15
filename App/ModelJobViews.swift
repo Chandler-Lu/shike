@@ -2,6 +2,17 @@ import SwiftUI
 import UserNotifications
 import ShikeCore
 
+enum ModelJobPresentation: Identifiable {
+    case list
+    case result(ModelJobRecord)
+    var id: String {
+        switch self {
+        case .list: return "tasks"
+        case .result(let record): return record.id.uuidString
+        }
+    }
+}
+
 /// Kept alive by the app delegate; both warm and cold notification taps route by durable task ID.
 final class ModelJobNotificationDelegate: NSObject, UNUserNotificationCenterDelegate {
     static let shared = ModelJobNotificationDelegate()
@@ -34,8 +45,8 @@ struct ModelJobListView: View {
                             if record.status == .running {
                                 ProgressView()
                                 Button("取消") { jobs.cancel(record.id) }.buttonStyle(.borderless)
-                            } else if record.output != nil || record.inputText != nil {
-                                Button(record.output == nil ? "查看输入" : "查看结果") { open(record) }.buttonStyle(.borderless)
+                            } else if record.output != nil || record.inputText != nil || record.summaryContext != nil {
+                                Button(record.output == nil ? "查看详情" : "查看结果") { open(record) }.buttonStyle(.borderless)
                             }
                         }
                         Text(record.status == .running ? jobs.progress[record.id] ?? "正在处理…" : record.output?.notice ?? record.error ?? "已结束")
@@ -62,14 +73,16 @@ struct ModelJobListView: View {
     private func open(_ record: ModelJobRecord) { selected = record; jobs.acknowledge(record.id) }
 }
 
-private struct ModelJobResultView: View {
+struct ModelJobResultView: View {
     let record: ModelJobRecord
     @ObservedObject var environment: AppEnvironment
     @ObservedObject var reminders: CountdownReminderService
     @Environment(\.dismiss) private var dismiss
     @State private var copied = false
     var body: some View {
-        if record.kind == .countdowns {
+        if record.kind == .summary {
+            ModelSummaryResult(record: record, environment: environment)
+        } else if record.kind == .countdowns {
             CountdownNaturalLanguageView(store: environment.countdowns, reminders: reminders, preferences: environment.preferences, restored: record) { dismiss() }
         } else { switch record.output {
         case .session(let session):
@@ -81,11 +94,6 @@ private struct ModelJobResultView: View {
                 ZStack { PaperBackground(); ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         switch record.output {
-                        case .summary(let title, let summary):
-                            Text(title).font(Notebook.handwriting(25))
-                            Text(summary.text(title: title, markdown: false)).textSelection(.enabled)
-                            Button("复制纯文本") { UIPasteboard.general.string = summary.text(title: title, markdown: false); copied = true }.buttonStyle(InkButtonStyle(prominent: false))
-                            Button("复制 Markdown") { UIPasteboard.general.string = summary.text(title: title, markdown: true); copied = true }.buttonStyle(InkButtonStyle(prominent: false))
                         case .models(let models):
                             Text("点按模型名称复制，可在接口设置中填写。").font(.subheadline)
                             ForEach(models) { model in
@@ -100,6 +108,18 @@ private struct ModelJobResultView: View {
                     .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
             }.tint(Notebook.accent)
         } }
+    }
+}
+
+private struct ModelSummaryResult: View {
+    @StateObject private var controller: CalendarSummaryController
+    @ObservedObject var environment: AppEnvironment
+    init(record: ModelJobRecord, environment: AppEnvironment) {
+        self.environment = environment
+        _controller = StateObject(wrappedValue: CalendarSummaryController(jobs: environment.modelJobs, restored: record))
+    }
+    var body: some View {
+        CalendarSummaryView(controller: controller, preferences: environment.preferences)
     }
 }
 

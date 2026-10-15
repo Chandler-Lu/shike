@@ -149,11 +149,11 @@ private struct ExpandedTextEditor: View {
                 PaperCard {
                     VStack(alignment: .leading, spacing: 10) {
                         ZStack(alignment: .topLeading) {
-                            if text.isEmpty {
-                                Text(placeholder).foregroundStyle(Notebook.secondaryInk)
-                                    .padding(.top, 8).padding(.leading, 5).allowsHitTesting(false)
-                            }
+                            Text(placeholder).foregroundStyle(Notebook.secondaryInk)
+                                .padding(.top, 8).padding(.leading, 5).allowsHitTesting(false)
+                                .opacity(text.isEmpty ? 1 : 0).accessibilityHidden(!text.isEmpty)
                             TextEditor(text: $text)
+                                .foregroundColor(Notebook.ink).tint(Notebook.accent)
                                 .scrollContentBackground(.hidden)
                                 .focused($focused)
                                 .accessibilityLabel(title)

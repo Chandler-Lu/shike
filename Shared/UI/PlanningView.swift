@@ -8,6 +8,7 @@ struct PlanningView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var answer = ""
     @FocusState private var answerFocused: Bool
+    @FocusState private var goalFocused: Bool
     private var plan: PlanningConversation? { controller.session.planning }
     private var zone: TimeZone { TimeZone(identifier: controller.session.referenceTimeZone) ?? .current }
     private var calendar: Calendar { var value = Calendar(identifier: .gregorian); value.timeZone = zone; return value }
@@ -22,7 +23,18 @@ struct PlanningView: View {
                     ScrollView {
                         columns {
                             VStack(alignment: .leading, spacing: 20) {
-                            MarginTitle(title: "给想做的事，留点时间", subtitle: plan?.goal)
+                            MarginTitle(title: "给想做的事，留点时间", subtitle: plan?.turns.isEmpty == false ? plan?.goal : nil)
+                            if plan?.turns.isEmpty == true {
+                                TextField("写下这次想做的事", text: Binding(get: { plan?.goal ?? "" }, set: { value in
+                                    controller.session.text = value
+                                    controller.session.planning?.goal = value
+                                }), axis: .vertical)
+                                    .lineLimit(3...6).padding(12)
+                                    .foregroundColor(Notebook.ink).tint(Notebook.accent)
+                                    .background(Notebook.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
+                                    .focused($goalFocused).disabled(controller.isBusy)
+                                    .accessibilityIdentifier("planningGoal")
+                            }
                             DisclosureGroup("安排范围与参考日历") {
                                 VStack(alignment: .leading, spacing: 14) {
                                     DatePicker("从哪一天", selection: Binding(get: { plan?.start ?? .now }, set: setStart), displayedComponents: .date)
@@ -84,13 +96,15 @@ struct PlanningView: View {
                                 }
                             } else if plan?.turns.isEmpty == true || plan?.awaitingReply == true {
                                 Button(plan?.turns.isEmpty == true && plan?.awaitingReply == false ? "开始安排" : "继续安排") {
-                                    controller.advancePlanning()
+                                    goalFocused = false; controller.advancePlanning()
                                 }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("startPlanning")
+                                    .disabled(plan?.goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false)
                             }
 
                             if controller.session.savedCount == 0, plan?.turns.isEmpty == false {
                                 HStack(alignment: .bottom, spacing: 10) {
                                     TextField(plan?.hasProposal == true ? "例如：改到晚上八点" : "也可以写下自己的回答", text: $answer, axis: .vertical)
+                                        .foregroundColor(Notebook.ink).tint(Notebook.accent)
                                         .lineLimit(1...5).padding(12).background(Notebook.ink.opacity(0.05), in: RoundedRectangle(cornerRadius: 12))
                                         .focused($answerFocused).accessibilityIdentifier("planningAnswer")
                                     Button { send(answer) } label: {
@@ -116,8 +130,15 @@ struct PlanningView: View {
             }.foregroundStyle(Notebook.ink)
                 .navigationTitle("帮我安排").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("重新安排") {
+                            controller.restartPlanning()
+                            if controller.session.planning?.goal.isEmpty == true { answer = ""; answerFocused = false; goalFocused = true }
+                        }.disabled(controller.isBusy || controller.review != nil || controller.consentRequest != nil)
+                            .accessibilityIdentifier("restartPlanning")
+                    }
                     ToolbarItem(placement: .confirmationAction) { Button("收起") { controller.persistReportingError(); dismiss() }.accessibilityIdentifier("closePlanning") }
-                    ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { answerFocused = false } }
+                    ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { answerFocused = false; goalFocused = false } }
                 }
                 .onDisappear { controller.persistReportingError() }
         }.tint(Notebook.accent)
@@ -160,22 +181,28 @@ struct CalendarFilterControls: View {
     }
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Button("选择全部日历") { update(nil) }.padding(.vertical, 6)
+            HStack {
+                Button("选择全部日历") { update(nil) }.accessibilityIdentifier("selectAllCalendars")
+                Spacer(minLength: 12)
+                Button("取消全选") { update([]) }.accessibilityIdentifier("deselectAllCalendars")
+            }.frame(minHeight: 44)
             ForEach(calendars.readableCalendars) { item in
-                Toggle(isOn: Binding(get: { references == nil || references!.contains(item.reference) }, set: { selected in
-                    var values = references ?? calendars.readableCalendars.map(\.reference)
-                    values.removeAll { $0 == item.reference }
-                    if selected { values.append(item.reference) }
-                    update(values)
-                })) {
-                    HStack {
+                HStack(spacing: 12) {
+                    HStack(spacing: 8) {
                         Circle().fill(item.color).frame(width: 9, height: 9)
                         VStack(alignment: .leading, spacing: 3) {
                             Text(item.title)
                             Text(item.account + (item.canWrite ? "" : " · 只读")).font(.caption).foregroundStyle(Notebook.secondaryInk)
-                        }
-                    }
-                }.tint(Notebook.accent).padding(.vertical, 4).accessibilityIdentifier("calendarFilter-\(item.id)")
+                        }.fixedSize(horizontal: false, vertical: true)
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                    Toggle(item.title, isOn: Binding(get: { references == nil || references!.contains(item.reference) }, set: { selected in
+                    var values = references ?? calendars.readableCalendars.map(\.reference)
+                    values.removeAll { $0 == item.reference }
+                    if selected { values.append(item.reference) }
+                    update(values)
+                    })).labelsHidden().toggleStyle(.switch).fixedSize().tint(Notebook.accent)
+                        .padding(.trailing, 6).accessibilityIdentifier("calendarFilter-\(item.id)")
+                }.padding(.vertical, 4)
             }
             if references?.isEmpty == true { Text(forPlanning ? "未选择参考日历，不会避开已有事件。" : "未选择要显示的日历。").font(.caption).foregroundStyle(Notebook.secondaryInk) }
         }

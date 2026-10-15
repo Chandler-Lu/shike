@@ -49,6 +49,7 @@ struct ModelJobRecord: Codable, Identifiable {
     var output: ModelJobOutput?
     var inputText: String?
     var referenceDate: Date?
+    var summaryContext: CalendarSummaryContext?
     var error: String?
     var notified = false
     var seen = false
@@ -103,10 +104,12 @@ struct ModelJobRecord: Codable, Identifiable {
     }
 
     @discardableResult func start(id: UUID = UUID(), kind: ModelJobKind, inputText: String? = nil, referenceDate: Date? = nil,
+        summaryContext: CalendarSummaryContext? = nil,
         work: @escaping @MainActor (ModelJobContext) async throws -> ModelJobOutput,
         completion: @escaping @MainActor (Result<ModelJobOutput, Error>) -> Void) -> Task<Void, Never> {
         var record = ModelJobRecord(id: id, kind: kind, createdAt: .now)
         record.inputText = inputText; record.referenceDate = referenceDate
+        record.summaryContext = summaryContext
         records.insert(record, at: 0)
         do { try write(record) }
         catch {
@@ -157,7 +160,9 @@ struct ModelJobRecord: Codable, Identifiable {
                 final.status = .failed; final.error = "结果保存失败：" + error.localizedDescription
                 storageError = final.error; result = .failure(ShikeError.message(final.error!))
             }
-            final.seen = !isBackground()
+            // A summary can finish after its sheet was dismissed. Only its visible
+            // result view may acknowledge it; foreground execution is not a read receipt.
+            final.seen = kind != .summary && !isBackground()
             try? write(final)
             records[index] = final
             completion(result)

@@ -351,7 +351,11 @@ final class ShikeUITests: XCTestCase {
         XCTAssertEqual(editor.value as? String, edited)
         editor.tap(); editor.typeText(" SwipeDismissMarker")
         app.buttons["收起键盘"].tap()
-        app.navigationBars["原文"].swipeDown()
+        let bar = app.navigationBars["原文"]
+        let dragStart = bar.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.3))
+        let dragEnd = app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.85))
+        dragStart.press(forDuration: 0.1, thenDragTo: dragEnd)
+        XCTAssertTrue(editor.waitForNonExistence(timeout: 5))
         XCTAssertTrue(app.buttons["parseEvents"].waitForExistence(timeout: 5))
         XCTAssertFalse(editor.exists)
         XCTAssertTrue((source.value as? String)?.contains("SwipeDismissMarker") == true)

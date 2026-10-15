@@ -12,7 +12,8 @@ struct RootView: View {
     @EnvironmentObject private var workspace: Workspace
     private var selection: Int { workspace.selection }
     @ObservedObject private var modelJobs: ModelJobCenter
-    @State private var showsModelJobs = false
+    @State private var modelJobPresentation: ModelJobPresentation?
+    @State private var hiddenModelBanner: String?
     @StateObject private var quickImport = QuickImportRouter.shared
     @StateObject private var countdownNavigation = CountdownNavigation()
     @StateObject private var shortcutInbox = ShortcutInbox.shared
@@ -22,56 +23,54 @@ struct RootView: View {
         _modelJobs = ObservedObject(wrappedValue: environment.modelJobs)
         environment.modelJobs.applySessions(to: environment.store)
         _countdownCoordinator = StateObject(wrappedValue: CountdownCoordinator(store: environment.countdowns, preferences: environment.preferences))
-        let unfinished = (try? environment.store?.all())?.first { (!$0.text.isEmpty || !$0.pendingImages.isEmpty) && ($0.drafts.isEmpty || $0.savedCount < $0.drafts.count) }
+        let unfinished = (try? environment.store?.all())?.first { (!$0.text.isEmpty || !$0.pendingImages.isEmpty || $0.planning != nil) && ($0.drafts.isEmpty || $0.savedCount < $0.drafts.count) }
         _controller = StateObject(wrappedValue: ImportController(environment: environment, session: unfinished ?? ImportSession()))
     }
     var body: some View {
         GeometryReader { geometry in
             let showsSidebar = geometry.size.width >= 820 && workspace.sidebarOverride != false
-            HStack(spacing: 0) {
-                WorkspaceSidebar(workspace: workspace)
-                    .frame(width: showsSidebar ? 220 : 0).clipped()
-                    .accessibilityHidden(!showsSidebar)
-                TabView(selection: $workspace.selection) {
-            NavigationStack { HomeView(controller: controller) }
-                .tabItem { Label("导入", systemImage: "square.and.pencil") }.tag(0)
-            NavigationStack { CalendarScreen(calendars: environment.calendars, preferences: environment.preferences, countdowns: environment.countdowns, reminders: countdownCoordinator.reminders) }
-                .tabItem { Label("日历", systemImage: "calendar") }.tag(3)
-            NavigationStack { CountdownScreen(store: environment.countdowns, coordinator: countdownCoordinator, preferences: environment.preferences, navigation: countdownNavigation) }
-                .tabItem { Label("倒数日", systemImage: "heart.text.clipboard") }.tag(4)
-            NavigationStack { HistoryView(environment: environment) }
-                .tabItem { Label("记录", systemImage: "book.closed") }.tag(1)
-            NavigationStack { SettingsView(environment: environment, countdownSync: countdownCoordinator.sync) }
-                .tabItem { Label("设置", systemImage: "slider.horizontal.3") }.tag(2)
-                }.toolbar(showsSidebar ? .hidden : .visible, for: .tabBar)
-                    .background(WorkspaceTabBarVisibility(hidden: showsSidebar))
-                    .environment(\.workspaceWidth, geometry.size.width - (showsSidebar ? 220 : 0))
-            }
-            .overlay(alignment: .topLeading) {
-                if PlatformSupport.isMac && geometry.size.width >= 820 {
-                    Button { workspace.sidebarOverride = !showsSidebar } label: { Image(systemName: "sidebar.left") }
-                        .padding(8).accessibilityLabel("切换侧边栏")
+            VStack(spacing: 0) {
+                modelJobBanner
+                HStack(spacing: 0) {
+                    if showsSidebar {
+                        WorkspaceSidebar(workspace: workspace).frame(width: 220)
+                    }
+                    TabView(selection: $workspace.selection) {
+                        NavigationStack { HomeView(controller: controller) }
+                            .tabItem { Label("导入", systemImage: "square.and.pencil") }.tag(0)
+                        NavigationStack { CalendarScreen(calendars: environment.calendars, preferences: environment.preferences, countdowns: environment.countdowns, reminders: countdownCoordinator.reminders) }
+                            .tabItem { Label("日历", systemImage: "calendar") }.tag(3)
+                        NavigationStack { CountdownScreen(store: environment.countdowns, coordinator: countdownCoordinator, preferences: environment.preferences, navigation: countdownNavigation) }
+                            .tabItem { Label("倒数日", systemImage: "heart.text.clipboard") }.tag(4)
+                        NavigationStack { HistoryView(environment: environment) }
+                            .tabItem { Label("记录", systemImage: "book.closed") }.tag(1)
+                        NavigationStack { SettingsView(environment: environment, countdownSync: countdownCoordinator.sync) }
+                            .tabItem { Label("设置", systemImage: "slider.horizontal.3") }.tag(2)
+                    }.toolbar(showsSidebar ? .hidden : .visible, for: .tabBar)
+                        .background(WorkspaceTabBarVisibility(hidden: showsSidebar))
+                        .environment(\.workspaceWidth, geometry.size.width - (showsSidebar ? 220 : 0))
+                }
+                .overlay(alignment: .topLeading) {
+                    if PlatformSupport.isMac && geometry.size.width >= 820 {
+                        Button { workspace.sidebarOverride = !showsSidebar } label: { Image(systemName: "sidebar.left") }
+                            .padding(8).accessibilityLabel("切换侧边栏")
+                    }
                 }
             }
         }.tint(Notebook.accent)
-            .safeAreaInset(edge: .top, spacing: 0) {
-                if modelJobs.records.contains(where: { $0.status == .running || !$0.seen && $0.status == .completed }) {
-                    Button { showsModelJobs = true } label: {
-                        HStack {
-                            Image(systemName: "sparkles")
-                            Text(modelJobs.records.contains(where: { $0.status == .running }) ? "模型正在处理，可稍后查看" : "模型结果已就绪")
-                            Spacer(); Image(systemName: "chevron.right")
-                        }.font(.subheadline).padding(.horizontal, 22).padding(.vertical, 8)
-                    }.buttonStyle(.plain).background(Notebook.paper)
+            .sheet(item: $modelJobPresentation, onDismiss: refreshCurrentSession) { presentation in
+                switch presentation {
+                case .list:
+                    ModelJobListView(jobs: modelJobs, environment: environment, reminders: countdownCoordinator.reminders).workspaceSheet()
+                case .result(let record):
+                    ModelJobResultView(record: record, environment: environment, reminders: countdownCoordinator.reminders)
+                        .workspaceSheet().onAppear { modelJobs.acknowledge(record.id) }
                 }
             }
-            .sheet(isPresented: $showsModelJobs, onDismiss: refreshCurrentSession) {
-                ModelJobListView(jobs: modelJobs, environment: environment, reminders: countdownCoordinator.reminders).workspaceSheet()
-            }
-            .onChange(of: modelJobs.requestedID) { _, id in if id != nil { showsModelJobs = true } }
+            .onChange(of: modelJobs.requestedID) { _, _ in routeModelJob() }
             .onAppear {
                 modelJobs.applySessions(to: environment.store)
-                if modelJobs.requestedID != nil { showsModelJobs = true }
+                routeModelJob()
             }
             .onOpenURL { url in
                 guard CountdownRoute(url: url) != nil else { return }
@@ -101,6 +100,48 @@ struct RootView: View {
                     } catch { controller.errorMessage = error.localizedDescription }
                 }
             }
+    }
+    @ViewBuilder private var modelJobBanner: some View {
+        if !bannerRecords.isEmpty, hiddenModelBanner != bannerSignature {
+            HStack {
+                Image(systemName: "sparkles")
+                Text(bannerRecords.contains(where: { $0.status == .completed }) ? "模型结果已就绪" : "模型正在处理，可稍后查看")
+                Spacer(); Image(systemName: "chevron.right")
+            }.font(.subheadline).padding(.horizontal, 22).frame(minHeight: 44)
+                .padding(.vertical, 4).background(Notebook.paper).contentShape(Rectangle())
+                .gesture(DragGesture(minimumDistance: 15).exclusively(before: TapGesture()).onEnded { value in
+                    switch value {
+                    case .first(let drag):
+                        if drag.translation.width < -55 && abs(drag.translation.width) > abs(drag.translation.height) {
+                            hiddenModelBanner = bannerSignature
+                        }
+                    case .second: openBannerResult()
+                    }
+                })
+                .accessibilityElement(children: .combine).accessibilityAddTraits(.isButton)
+                .accessibilityIdentifier("modelJobBanner")
+                .accessibilityAction { openBannerResult() }
+                .accessibilityAction(named: "隐藏提示") { hiddenModelBanner = bannerSignature }
+                .zIndex(1)
+        }
+    }
+    private func openBannerResult() {
+        if let ready = bannerRecords.first(where: { $0.status == .completed }) {
+            modelJobPresentation = .result(ready)
+        } else { modelJobPresentation = .list }
+    }
+    private var bannerRecords: [ModelJobRecord] {
+        modelJobs.records.filter { $0.status == .running || !$0.seen && $0.status == .completed }
+    }
+    private var bannerSignature: String {
+        bannerRecords.map { $0.id.uuidString + $0.status.rawValue }.joined(separator: "|")
+    }
+    private func routeModelJob() {
+        guard let id = modelJobs.requestedID else { return }
+        if let record = modelJobs.record(id), record.status != .running {
+            modelJobPresentation = .result(record)
+            modelJobs.requestedID = nil
+        } else { modelJobPresentation = .list }
     }
     private func refreshCurrentSession() {
         guard !controller.isBusy, controller.review == nil, !controller.showsPlanning else { return }
