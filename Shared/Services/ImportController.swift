@@ -83,7 +83,7 @@ struct DraftReview {
         guard !isBusy, review == nil, consentRequest == nil, session.savedCount == 0 else { return }
         session.referenceDate = now
         persistReportingError()
-        information = session.hasParsed ? "参考时间已更新，重新提取时生效。" : "参考时间已更新为当前时间。"
+        information = nil
     }
 
     func startNew() {
