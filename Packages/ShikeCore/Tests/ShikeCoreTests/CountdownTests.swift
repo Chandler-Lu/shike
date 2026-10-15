@@ -18,6 +18,40 @@ final class CountdownTests: XCTestCase {
         XCTAssertEqual(CountdownDates.next(annual, onOrAfter: date("2026-10-15")), date("2027-10-14"))
         XCTAssertEqual(annual.anchorDate.description, "2000-10-14")
     }
+    func testCountUnitsKeepRemaindersAndUseCalendarMonthsAndYears() {
+        let past = entry("2024-01-31"), now = date("2025-03-02")
+        XCTAssertEqual(CountdownDisplayValue(past, now: now, unit: .weeks).label, "已经 56 周 4 天")
+        XCTAssertEqual(CountdownDisplayValue(past, now: now, unit: .months).label, "已经 13 个月 2 天")
+        XCTAssertEqual(CountdownDisplayValue(past, now: now, unit: .years).label, "已经 1 年 1 个月 2 天")
+        XCTAssertEqual(CountdownDisplayValue(entry("2025-02-28"), now: date("2024-02-29"), unit: .years).label, "还有 1 年")
+        XCTAssertEqual(CountdownDisplayValue(entry("2026-10-15"), now: date("2026-10-14"), unit: .months).label, "还有 0 个月 1 天")
+        XCTAssertEqual(CountdownDisplayValue(entry("2026-10-14"), now: date("2026-10-14"), unit: .weeks).label, "就是今天 0 周")
+    }
+    func testCountUnitsRespectInclusiveDaysRecurrenceAndLunarMonths() {
+        var past = entry("2026-01-01"); past.includesStartDay = true
+        XCTAssertEqual(CountdownDisplayValue(past, now: date("2026-01-31"), unit: .months).label, "已经 1 个月")
+        XCTAssertEqual(CountdownDisplayValue(past, now: date("2026-01-08"), unit: .weeks).label, "已经 1 周 1 天")
+        past.recurrence = .yearly
+        XCTAssertEqual(CountdownDisplayValue(past, now: date("2026-12-01"), unit: .months).label, "还有 1 个月")
+        let lunar = entry("2023-02-20", lunar: true)
+        XCTAssertEqual(CountdownDisplayValue(lunar, now: date("2023-03-22"), unit: .months).label, "已经 1 个月")
+        let lunarYear = entry("2023-01-22", lunar: true)
+        XCTAssertEqual(CountdownDisplayValue(lunarYear, now: date("2024-02-10"), unit: .months).label, "已经 13 个月")
+        XCTAssertEqual(CountdownDisplayValue(lunarYear, now: date("2024-02-10"), unit: .years).label, "已经 1 年")
+    }
+    func testCountUnitsPreserveSecondsAndEntryTimeZoneAcrossDST() {
+        var precise = entry("2026-04-01"); precise.targetTime = CountdownTime(hour: 12, minute: 34, second: 56)
+        let now = date("2026-03-01").addingTimeInterval(10 * 3600 + 20 * 60 + 30)
+        XCTAssertEqual(CountdownDisplayValue(precise, now: now, unit: .months).label, "还有 1 个月 02:14:26")
+        XCTAssertEqual(CountdownDisplayValue(precise, now: now, unit: .years).label, "还有 0 年 1 个月 02:14:26")
+        let la = TimeZone(identifier: "America/Los_Angeles")!
+        precise.timeZoneIdentifier = la.identifier; precise.targetTime = CountdownTime(hour: 12)
+        let beforeDST = date("2026-03-01", zone: la).addingTimeInterval(12 * 3600)
+        XCTAssertEqual(CountdownDisplayValue(precise, now: beforeDST, systemZone: shanghai, unit: .months).label, "还有 1 个月 00:00:00")
+        precise.anchorDate = CivilDate(year: 2026, month: 3, day: 1); precise.includesStartDay = true
+        let afterDST = date("2026-04-01", zone: la).addingTimeInterval(12 * 3600)
+        XCTAssertEqual(CountdownDisplayValue(precise, now: afterDST, systemZone: shanghai, unit: .months).label, "已经 1 个月 00:00:00", "Precise durations do not add an inclusive natural day")
+    }
     func testMonthlyClampsWithoutDrifting() {
         let v = entry("2024-01-31", repeat: .monthly)
         let values = CountdownDates.occurrences(v, in: DateInterval(start: date("2024-02-01"), end: date("2024-05-01")))

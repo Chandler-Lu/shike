@@ -168,6 +168,25 @@ final class NewFeatureUITests: XCTestCase {
         XCTAssertTrue(choose.label.contains("缅因猫"), choose.label)
         capture("countdown-card-selected-artwork", app: app)
     }
+    func testCountdownDetailCyclesUnitsAndResetsAfterClosing() {
+        let app = launch(); section(4, name: "倒数日", app: app)
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "countdown-", "下一次，一起去看海")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); activate(card)
+        let count = app.buttons["cycleCountdownUnit"]
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+        XCTAssertEqual(count.label, "还有 12 天")
+        activate(count); XCTAssertEqual(count.label, "还有 1 周 5 天")
+        activate(count); XCTAssertEqual(count.label, "还有 0 个月 12 天")
+        activate(count); XCTAssertEqual(count.label, "还有 0 年 12 天")
+        capture("countdown-detail-years", app: app)
+        activate(count); XCTAssertEqual(count.label, "还有 12 天")
+        activate(count); XCTAssertEqual(count.label, "还有 1 周 5 天")
+        activate(app.buttons["closeCountdownDetail"])
+        XCTAssertTrue(count.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(card.label.contains("12 天")); activate(card)
+        XCTAssertTrue(count.waitForExistence(timeout: 5))
+        XCTAssertEqual(count.label, "还有 12 天")
+    }
     func testCountdownHoldSelectsMultipleAndMovesThenDeletesOnlySelection() {
         let app = launch(); section(4, name: "倒数日", app: app)
         func card(_ title: String) -> XCUIElement {

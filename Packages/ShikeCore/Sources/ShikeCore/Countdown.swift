@@ -212,6 +212,17 @@ public enum CountdownDates {
     }
 }
 
+/// A temporary presentation choice; it is never stored with the countdown.
+public enum CountdownCountUnit: CaseIterable, Sendable {
+    case days, weeks, months, years
+    public var title: String {
+        switch self { case .days: return "天"; case .weeks: return "周"; case .months: return "个月"; case .years: return "年" }
+    }
+    public var next: Self {
+        switch self { case .days: return .weeks; case .weeks: return .months; case .months: return .years; case .years: return .days }
+    }
+}
+
 /// Structured presentation shared by cards and widgets; the stored countdown is unchanged.
 public struct CountdownDisplayValue: Equatable, Sendable {
     public enum Phase: Sendable { case upcoming, today, elapsed }
@@ -220,14 +231,19 @@ public struct CountdownDisplayValue: Equatable, Sendable {
     public let time: String?
     public let target: Date
     public let date: CivilDate
+    public let unit: CountdownCountUnit
+    public let count: Int
+    public let remainder: String?
     public var status: String { phase == .today ? "就是今天" : phase == .elapsed ? "已经" : "还有" }
     public var label: String {
-        if phase == .today { return status }
-        return "\(status) \(days) 天" + (time.map { " " + $0 } ?? "")
+        if phase == .today && unit == .days { return status }
+        return "\(status) \(count) \(unit.title)" + (remainder.map { " " + $0 } ?? "") + (time.map { " " + $0 } ?? "")
     }
-    public init(_ entry: Countdown, now: Date = .now, systemZone: TimeZone = .current) {
+    public init(_ entry: Countdown, now: Date = .now, systemZone: TimeZone = .current, unit: CountdownCountUnit = .days) {
+        self.unit = unit
         let zone = entry.timeZone(system: systemZone)
         let anchor = entry.anchorDate.date(in: zone) ?? now
+        let dayTime: String?
         if entry.targetTime != nil {
             target = CountdownDates.nextInstant(entry, onOrAfter: now, systemZone: systemZone)
                 ?? CountdownDates.instant(entry, on: anchor, systemZone: systemZone) ?? anchor
@@ -235,16 +251,45 @@ public struct CountdownDisplayValue: Equatable, Sendable {
             let seconds = Int(interval > 0 ? ceil(interval) : floor(-interval))
             phase = interval >= 0 ? .upcoming : .elapsed
             days = seconds / 86_400
-            time = String(format: "%02d:%02d:%02d", seconds % 86_400 / 3_600, seconds % 3_600 / 60, seconds % 60)
+            dayTime = String(format: "%02d:%02d:%02d", seconds % 86_400 / 3_600, seconds % 3_600 / 60, seconds % 60)
         } else {
             target = CountdownDates.next(entry, onOrAfter: now, systemZone: systemZone) ?? anchor
             let distance = CountdownDates.days(from: now, to: target, timeZone: zone)
             let inclusive = distance <= 0 && entry.recurrence == .none && entry.includesStartDay == true
             phase = inclusive || distance < 0 ? .elapsed : distance == 0 ? .today : .upcoming
             days = inclusive ? CountdownDates.elapsedDays(entry, now: now, systemZone: systemZone) : abs(distance)
-            time = nil
+            dayTime = nil
         }
         date = CivilDate(target, timeZone: zone)
+        switch unit {
+        case .days:
+            count = days; remainder = nil; time = dayTime
+        case .weeks:
+            count = days / 7; remainder = days % 7 == 0 ? nil : "\(days % 7) 天"; time = dayTime
+        case .months, .years:
+            let calendar = CountdownDates.calendar(entry, systemZone: systemZone)
+            let start: Date
+            var end: Date
+            if entry.targetTime != nil {
+                start = min(now, target)
+                let seconds = abs(target.timeIntervalSince(now)).rounded(phase == .upcoming ? .up : .down)
+                end = start.addingTimeInterval(seconds)
+            } else {
+                start = calendar.startOfDay(for: min(now, target))
+                end = calendar.startOfDay(for: max(now, target))
+                if phase == .elapsed && entry.recurrence == .none && entry.includesStartDay == true {
+                    end = calendar.date(byAdding: .day, value: 1, to: end) ?? end
+                }
+            }
+            let fields: Set<Calendar.Component> = unit == .years ? [.year, .month, .day, .hour, .minute, .second] : [.month, .day, .hour, .minute, .second]
+            let parts = calendar.dateComponents(fields, from: start, to: end)
+            count = max(0, unit == .years ? parts.year ?? 0 : parts.month ?? 0)
+            var rest: [String] = []
+            if unit == .years, let months = parts.month, months > 0 { rest.append("\(months) 个月") }
+            if let days = parts.day, days > 0 { rest.append("\(days) 天") }
+            remainder = rest.isEmpty ? nil : rest.joined(separator: " ")
+            time = entry.targetTime == nil ? nil : String(format: "%02d:%02d:%02d", parts.hour ?? 0, parts.minute ?? 0, parts.second ?? 0)
+        }
     }
 }
 

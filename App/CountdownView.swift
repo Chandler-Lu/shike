@@ -395,6 +395,8 @@ struct CountdownCard: View {
     let now: Date
     var layout: CountdownLayout = .single
     var selection: Bool? = nil
+    var countUnit: CountdownCountUnit = .days
+    var onCountTap: (() -> Void)? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private var compact: Bool { layout != .single }
     var body: some View {
@@ -431,19 +433,33 @@ struct CountdownCard: View {
             if entry.pinned { Image(systemName: "pin.fill").font(.system(size: compact ? 12 : 14)).foregroundStyle(Notebook.accent).accessibilityLabel("已置顶") }
         }
     }
-    private func countLabel(alignment: HorizontalAlignment = .leading) -> some View {
-        let value = CountdownDisplayValue(entry, now: now)
+    @ViewBuilder private func countLabel(alignment: HorizontalAlignment = .leading) -> some View {
+        if let onCountTap {
+            Button(action: onCountTap) {
+                countContent(alignment: alignment).frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
+            }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("cycleCountdownUnit")
+                .accessibilityHint("切换为\(countUnit.next.title)计数")
+        } else { countContent(alignment: alignment) }
+    }
+    private func countContent(alignment: HorizontalAlignment) -> some View {
+        let value = CountdownDisplayValue(entry, now: now, unit: countUnit)
         return VStack(alignment: alignment, spacing: 3) {
-            if value.phase == .today {
+            if value.phase == .today && countUnit == .days {
                 Text(value.status).font(Notebook.handwriting(compact ? 23 : 30, relativeTo: .title))
                     .lineLimit(1).minimumScaleFactor(0.7)
             } else {
                 Text(value.status).font(.caption)
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("\(value.days)").font(Notebook.handwriting(compact ? 25 : 36, relativeTo: .title)).monospacedDigit()
-                    Text("天").font(Notebook.handwriting(compact ? 17 : 21, relativeTo: .body))
+                    Text("\(value.count)").font(Notebook.handwriting(compact ? 25 : 36, relativeTo: .title)).monospacedDigit()
+                    Text(value.unit.title).font(Notebook.handwriting(compact ? 17 : 21, relativeTo: .body))
                 }.lineLimit(1).minimumScaleFactor(0.65)
                     .accessibilityIdentifier("countdownDays-\(entry.id)")
+                if let remainder = value.remainder {
+                    Text(remainder).font(Notebook.handwriting(compact ? 17 : 21, relativeTo: .body))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 if let time = value.time {
                     Text(time).font(.system(.caption, design: .monospaced)).lineLimit(1).minimumScaleFactor(0.7)
                 }
@@ -470,6 +486,7 @@ struct CountdownDetail: View {
     @State private var deleting = false
     @State private var imageExport: CountdownImageExport?
     @State private var error: String?
+    @State private var countUnit: CountdownCountUnit = .days
     private var entry: Countdown? { store.entries.first { $0.id == id } }
     private func closeDetail() { if let onClose { onClose() } else { dismiss() } }
     var body: some View {
@@ -480,7 +497,8 @@ struct CountdownDetail: View {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 22) {
                             TimelineView(.periodic(from: .now, by: entry.targetTime == nil ? 60 : 1)) { context in
-                                CountdownCard(entry: entry, category: store.categories.first { $0.id == entry.categoryID }?.name, now: context.date)
+                                CountdownCard(entry: entry, category: store.categories.first { $0.id == entry.categoryID }?.name,
+                                              now: context.date, countUnit: countUnit, onCountTap: { countUnit = countUnit.next })
                             }
                             PaperCard {
                                 VStack(alignment: .leading, spacing: 12) {
@@ -531,7 +549,7 @@ struct CountdownDetail: View {
                 } else { Text("这个日子已被删除。").font(Notebook.handwriting(25)) }
             }.foregroundStyle(Notebook.ink).navigationTitle("记住这一天").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("完成") { closeDetail() } }
+                    ToolbarItem(placement: .cancellationAction) { Button("完成") { closeDetail() }.accessibilityIdentifier("closeCountdownDetail") }
                     ToolbarItem(placement: .primaryAction) { if entry != nil { Button("编辑") { editing = true }.accessibilityIdentifier("editCountdown") } }
                 }
                 .sheet(isPresented: $editing) { if let entry { CountdownEditor(store: store, reminders: reminders, entry: entry).workspaceSheet() } }
@@ -541,6 +559,8 @@ struct CountdownDetail: View {
                     Button("取消", role: .cancel) {}
                 } message: { Text("开启 iCloud 同步时，其他设备上的这条记录也会删除。") }
         }.tint(Notebook.accent)
+            .onChange(of: id) { _, _ in countUnit = .days }
+            .onDisappear { countUnit = .days }
     }
 }
 
