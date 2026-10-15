@@ -14,7 +14,7 @@ struct CalendarSummaryView: View {
     @State private var summary: CalendarSummary?
     @State private var error: String?
     @State private var copied: String?
-    @State private var attempt = 0
+    @State private var started = false
     @State private var recipient = ""
     @State private var progressMessage = "正在整理这些安排…"
     @State private var generation = UUID()
@@ -38,15 +38,15 @@ struct CalendarSummaryView: View {
                         if let copied { Text(copied).font(.caption).foregroundStyle(Notebook.accent) }
                     } else if let error {
                         NoteMessage(text: error, isError: true)
-                        Button("重新总结") { attempt += 1 }.buttonStyle(InkButtonStyle())
+                        Button("重新总结") { generate() }.buttonStyle(InkButtonStyle())
                     } else {
                         HStack { ProgressView(); Text(progressMessage) }.padding(.vertical, 25)
                     }
                 }.padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity, alignment: .leading)
             } }.navigationTitle("日历总结").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(summary == nil && error == nil ? "取消" : "完成") { generation = UUID(); dismiss() } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button(summary == nil && error == nil ? "取消" : "完成") { if summary == nil && error == nil { ModelJobCenter.shared.cancel(generation) }; dismiss() } } }
         }.tint(Notebook.accent)
-            .task(id: attempt) { await generate() }
+            .onAppear { if !started { started = true; generate() } }
     }
     @ViewBuilder private func section(_ title: String, values: [String]) -> some View {
         if !values.isEmpty {
@@ -64,7 +64,7 @@ struct CalendarSummaryView: View {
         UIPasteboard.general.string = value.text(title: request.title, markdown: markdown)
         copied = markdown ? "已复制 Markdown" : "已复制纯文本"
     }
-    @MainActor private func generate() async {
+    @MainActor private func generate() {
         error = nil; summary = nil; copied = nil
         let token = UUID(); generation = token; progressMessage = "正在整理这些安排…"
         do {
@@ -77,14 +77,24 @@ struct CalendarSummaryView: View {
             let profile = preferences.activeProfile
             let configuration = profile?.configuration ?? preferences.configuration
             recipient = URL(string: configuration.baseURL)?.host ?? ""
-            let value = try await LLMClient().summarizeCalendar(request.input, configuration: configuration, apiKey: profile.map { try preferences.profileKey($0) } ?? "", observer: { update in
-                guard case .progress(let progress) = update else { return }
-                Task { @MainActor in
-                    guard generation == token, summary == nil, error == nil else { return }
-                    progressMessage = progress.message
+            let key = try profile.map { try preferences.profileKey($0) } ?? ""
+            ModelJobCenter.shared.start(id: token, kind: .summary, work: { context in
+                let value = try await LLMClient().summarizeCalendar(request.input, configuration: configuration, apiKey: key, observer: context.observer { update in
+                    guard case .progress(let progress) = update else { return }
+                    Task { @MainActor in
+                        guard generation == token, summary == nil, error == nil else { return }
+                        progressMessage = progress.message
+                    }
+                })
+                return .summary(title: request.title, value: value)
+            }, completion: { result in
+                guard generation == token else { return }
+                switch result {
+                case .success(.summary(_, let value)): summary = value
+                case .failure(let failure): if !(failure is CancellationError) { error = failure.localizedDescription }
+                default: break
                 }
             })
-            try Task.checkCancellation(); summary = value
         } catch is CancellationError { }
         catch { if !Task.isCancelled { self.error = error.localizedDescription } }
     }

@@ -150,7 +150,7 @@ final class LLMTransport: NSObject, URLSessionDataDelegate, @unchecked Sendable 
             let elapsed = now - operationStart
             guard Int(elapsed) != lastProgressSecond else { return }
             lastProgressSecond = Int(elapsed)
-            observer?(.progress(.init(stage: phase, elapsed: elapsed, attempt: metrics.number)))
+            observer?(.progress(.init(stage: phase, elapsed: elapsed, attempt: metrics.number, receivedBytes: metrics.receivedBytes)))
         }
         func receive(_ chunk: Data) throws {
             lastData = now

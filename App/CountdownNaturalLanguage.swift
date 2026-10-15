@@ -9,15 +9,22 @@ import ShikeCore
     @Published private(set) var progressMessage = "正在识别日子…"
     @Published private(set) var recognizedText: String?
     @Published var consentRequest: ExtractionConsent?
-    let referenceDate = Date.now
+    private(set) var referenceDate = Date.now
+    private var jobID: UUID?
     let preferences: Preferences
     private let consent: ExtractionConsentStore
     private let client: LLMClient
     private let store: CountdownStore
     private var operation: Task<Void, Never>?
     private var generation = UUID()
-    init(preferences: Preferences, store: CountdownStore, consent: ExtractionConsentStore? = nil, client: LLMClient = LLMClient()) {
+    init(preferences: Preferences, store: CountdownStore, consent: ExtractionConsentStore? = nil, client: LLMClient = LLMClient(), restored: ModelJobRecord? = nil) {
         self.preferences = preferences; self.store = store; self.consent = consent ?? ExtractionConsentStore(); self.client = client
+        if let restored {
+            text = restored.inputText ?? ""; referenceDate = restored.referenceDate ?? .now; jobID = restored.id
+        }
+        if let restored, case .countdowns(let input, let reference, let drafts) = restored.output {
+            text = input; recognizedText = input; referenceDate = reference; self.drafts = drafts; jobID = restored.id
+        }
     }
     var inputChanged: Bool { recognizedText != nil && recognizedText != text }
     var canSave: Bool { !busy && !inputChanged && !drafts.filter(\.selected).isEmpty && drafts.filter(\.selected).allSatisfy { !$0.dateMissing } }
@@ -50,26 +57,32 @@ import ShikeCore
                     self.progressMessage = progress.message
                 }
             }
-            operation = Task {
-                defer { if generation == token { busy = false; operation = nil } }
-                do {
+            jobID = token
+            operation = ModelJobCenter.shared.start(id: token, kind: .countdowns, inputText: input, referenceDate: referenceDate, work: { [self] context in
                     let result: [CountdownDraft]
                     #if DEBUG
                     if fixture {
                         try await Task.sleep(for: .milliseconds(250))
                         result = try CountdownExtraction.decode(Self.fixtureResponse, referenceDate: referenceDate, timeZone: zone, categories: categories)
                     } else {
-                        result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories, observer: observer)
+                        result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories, observer: context.observer(observer))
                     }
                     #else
-                    result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories, observer: observer)
+                    result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories, observer: context.observer(observer))
                     #endif
-                    try Task.checkCancellation(); guard generation == token else { return }
-                    drafts = result; recognizedText = input
-                    if result.isEmpty { error = "没有识别到日子，试着写上名称和日期，例如“12 月 1 日去看海”。" }
-                } catch is CancellationError { }
-                catch { if generation == token { self.error = error.localizedDescription } }
-            }
+                    try Task.checkCancellation()
+                    return .countdowns(text: input, reference: referenceDate, drafts: result)
+            }, completion: { [self] result in
+                guard generation == token else { return }
+                busy = false; operation = nil
+                switch result {
+                case .success(.countdowns(_, _, let values)):
+                    drafts = values; recognizedText = input
+                    if values.isEmpty { error = "没有识别到日子，试着写上名称和日期，例如“12 月 1 日去看海”。" }
+                case .failure(let error): if !(error is CancellationError) { self.error = error.localizedDescription }
+                default: break
+                }
+            })
         } catch { self.error = error.localizedDescription }
     }
     func cancel() { generation = UUID(); operation?.cancel(); operation = nil; busy = false }
@@ -77,6 +90,7 @@ import ShikeCore
         guard canSave else { throw ShikeError.message("请先补全所选日子的日期。") }
         let entries = drafts.filter(\.selected).map(\.entry)
         try store.insert(entries)
+        if let jobID { ModelJobCenter.shared.acknowledge(jobID) }
         return entries
     }
     #if DEBUG
@@ -94,9 +108,9 @@ struct CountdownNaturalLanguageView: View {
     @FocusState private var focused: Bool
     @Environment(\.dismiss) private var dismiss
     let onSaved: () -> Void
-    init(store: CountdownStore, reminders: CountdownReminderService, preferences: Preferences, onSaved: @escaping () -> Void) {
+    init(store: CountdownStore, reminders: CountdownReminderService, preferences: Preferences, restored: ModelJobRecord? = nil, onSaved: @escaping () -> Void) {
         self.store = store; self.reminders = reminders; self.preferences = preferences; self.onSaved = onSaved
-        _controller = StateObject(wrappedValue: CountdownNaturalLanguageController(preferences: preferences, store: store))
+        _controller = StateObject(wrappedValue: CountdownNaturalLanguageController(preferences: preferences, store: store, restored: restored))
     }
     var body: some View {
         NavigationStack {
@@ -125,7 +139,7 @@ struct CountdownNaturalLanguageView: View {
             }.scrollDismissesKeyboard(.interactively) }
                 .foregroundStyle(Notebook.ink).navigationTitle("自然语言识别").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("取消") { controller.cancel(); dismiss() }.disabled(saving) }
+                    ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() }.disabled(saving) }
                     ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { focused = false } }
                 }
                 .sheet(item: $controller.consentRequest) { scope in
@@ -139,7 +153,7 @@ struct CountdownNaturalLanguageView: View {
                         controller.drafts[index].reviewNotes = []
                     }
                 }
-                .onDisappear { controller.cancel() }
+
         }.tint(Notebook.accent).interactiveDismissDisabled(saving)
     }
     private var inputCard: some View {

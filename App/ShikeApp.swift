@@ -23,6 +23,7 @@ import ShikeCore
         #if DEBUG
         if CloudKitReadOnlyProbe.isRequested { Task { await CloudKitReadOnlyProbe.run() } }
         if LLMReadOnlyProbe.isRequested { Task { await LLMReadOnlyProbe.run() } }
+        if ModelBackgroundProbe.isRequested { Task { await ModelBackgroundProbe.run() } }
         #endif
     }
     var body: some Scene {

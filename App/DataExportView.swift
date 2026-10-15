@@ -68,7 +68,7 @@ struct DataExportView: View {
                             .padding(.trailing, 4).accessibilityIdentifier("automaticDataBackup")
                         Toggle("同时备份到 iCloud Drive", isOn: $backups.cloudEnabled)
                             .padding(.trailing, 4).accessibilityIdentifier("backupToCloud")
-                        Text("数据变化后、打开或离开 App 时检查备份。每台设备保留最近 30 份本地与云端副本；文件保存在 iCloud Drive → 拾刻计划 → Backups。")
+                        Text("数据变化后、打开或离开 App 时检查备份。每台设备保留最近 20 份本地与云端副本；文件保存在 iCloud Drive → 拾刻计划 → Backups。")
                             .font(.caption).foregroundStyle(Notebook.secondaryInk)
                         Text(backups.status).font(.caption).foregroundStyle(Notebook.secondaryInk)
                         if backups.cloudEnabled {

@@ -10,16 +10,18 @@ import ShikeCore
     let startupError: String?
     let consent: ExtractionConsentStore
     let llmClient: LLMClient
+    let modelJobs: ModelJobCenter
     #if !SHARE_EXTENSION
     lazy var backups = DataBackupService(environment: self)
     #endif
     init(preferences: Preferences? = nil, calendars: CalendarService? = nil, store: SessionStore? = nil,
-         consent: ExtractionConsentStore? = nil, llmClient: LLMClient = LLMClient()) {
+         consent: ExtractionConsentStore? = nil, llmClient: LLMClient = LLMClient(), modelJobs: ModelJobCenter? = nil) {
         self.preferences = preferences ?? Preferences()
         self.countdowns = CountdownStore(inMemory: AppIdentity.isUITesting)
         self.calendars = calendars ?? CalendarService()
         self.consent = consent ?? ExtractionConsentStore()
         self.llmClient = llmClient
+        self.modelJobs = modelJobs ?? .shared
         do { self.store = try store ?? SessionStore(inMemory: AppIdentity.isUITesting); startupError = nil }
         catch { self.store = nil; startupError = error.localizedDescription }
         self.preferences.updateCalendars(self.calendars.calendars)
@@ -125,13 +127,14 @@ struct DraftReview {
         resumeImages()
     }
 
-    func resumeImages() {
+    func resumeImages(parseAfterRecognition: Bool = false) {
         guard !isBusy, !session.pendingImages.isEmpty else { return }
         do { try persist() } catch { errorMessage = error.localizedDescription; return }
         busyMessage = "正在识别图片…"
         let files = session.pendingImages
         operation = Task {
-            defer { busyMessage = nil }
+            var startedModel = false
+            defer { if !startedModel { busyMessage = nil } }
             var failures: [String] = []
             for (index, file) in files.enumerated() {
                 busyMessage = "正在识别第 \(index + 1) / \(files.count) 张图片…"
@@ -146,8 +149,12 @@ struct DraftReview {
                 } catch is CancellationError { return }
                 catch { failures.append("第 \(index + 1) 张：\(error.localizedDescription)") }
             }
+            busyMessage = nil
             if !failures.isEmpty { errorMessage = failures.joined(separator: "\n") }
-            else { information = "文字已识别，可以核对后提取日程。" }
+            else {
+                information = "文字已识别，可以核对后提取日程。"
+                if parseAfterRecognition { parse(); startedModel = isBusy }
+            }
         }
     }
 
@@ -164,23 +171,14 @@ struct DraftReview {
                 return
             }
         } catch { errorMessage = error.localizedDescription; return }
+        let extraction: (@escaping LLMObserver) async throws -> [EventDraft]
+        do { extraction = try prepareExtraction() }
+        catch { errorMessage = error.localizedDescription; return }
         busyMessage = "正在整理日程…"
-        operation = Task {
-            defer { busyMessage = nil }
-            do {
+        operation = environment.modelJobs.start(kind: .extraction, work: { [self] context in
                 try Task.checkCancellation()
                 try persist()
-                let drafts: [EventDraft]
-                #if DEBUG
-                if AppIdentity.usesFixtureModel {
-                    try await Task.sleep(for: .milliseconds(300))
-                    drafts = try ExtractionDecoder.decode(Self.testResponse, timeZone: TimeZone(identifier: "Asia/Shanghai")!)
-                } else {
-                    drafts = try await requestExtraction()
-                }
-                #else
-                drafts = try await requestExtraction()
-                #endif
+                let drafts = try await extraction(context.observer(modelObserver()))
                 try Task.checkCancellation()
                 // Parsing never overwrites already saved events; the UI starts a fresh import for new material.
                 guard !session.drafts.contains(where: \.isSaved) else { throw ShikeError.message("已有日程保存到日历，请新建一次导入再解析。") }
@@ -202,13 +200,20 @@ struct DraftReview {
                     replacement.drafts[1].calendarID = nil
                 }
                 #endif
-                guard let store = environment.store else { throw ShikeError.message("草稿存储不可用。") }
-                try store.save(replacement)
+                return .session(replacement)
+        }, completion: { [self] result in
+            busyMessage = nil
+            switch result {
+            case .success(.session(let replacement)):
                 session = replacement
-                if drafts.isEmpty { information = "没有找到明确的日程。可以补充日期、时间和安排后再试。" }
-            } catch is CancellationError { information = "已取消，原文已保留。" }
-            catch { errorMessage = error.localizedDescription }
-        }
+                environment.modelJobs.applySessions(to: environment.store)
+                if replacement.drafts.isEmpty { information = "没有找到明确的日程。可以补充日期、时间和安排后再试。" }
+            case .failure(let error):
+                if error is CancellationError { information = "已取消，原文已保留。" }
+                else { errorMessage = error.localizedDescription }
+            default: break
+            }
+        })
     }
 
     private func modelObserver() -> LLMObserver {
@@ -222,7 +227,15 @@ struct DraftReview {
         }
     }
 
-    private func requestExtraction() async throws -> [EventDraft] {
+    private func prepareExtraction() throws -> (@escaping LLMObserver) async throws -> [EventDraft] {
+        #if DEBUG
+        if AppIdentity.usesFixtureModel {
+            return { _ in
+                try await Task.sleep(for: .milliseconds(300))
+                return try ExtractionDecoder.decode(Self.testResponse, timeZone: TimeZone(identifier: "Asia/Shanghai")!)
+            }
+        }
+        #endif
         let preferences = environment.preferences
         let profile = preferences.activeProfile
         let configuration = profile?.configuration ?? preferences.configuration
@@ -237,15 +250,18 @@ struct DraftReview {
         let calendars = preferences.categoryRoutingEnabled ? environment.calendars.calendars : []
         let candidates = calendars.enumerated().map { CalendarCandidate(id: "calendar-\($0.offset)", name: $0.element.title) }
         let identifiers = Dictionary(uniqueKeysWithValues: zip(candidates.map(\.id), calendars.map(\.id)))
-        let drafts = try await environment.llmClient.extract(text: session.text, referenceDate: session.createdAt,
+        let session = session, prompts = preferences.promptSettings, client = environment.llmClient
+        return { observer in
+        let drafts = try await client.extract(text: session.text, referenceDate: session.createdAt,
                                      timeZone: TimeZone(identifier: session.referenceTimeZone) ?? .current,
                                      configuration: configuration, apiKey: apiKey,
                                      calendars: candidates,
-                                     forcedCategory: session.forcedCategory, prompts: preferences.promptSettings, observer: modelObserver())
+                                     forcedCategory: session.forcedCategory, prompts: prompts, observer: observer)
         return drafts.map { draft in
             var draft = draft
             draft.suggestedCalendarID = draft.suggestedCalendarID.flatMap { identifiers[$0] }
             return draft
+        }
         }
     }
 
@@ -525,10 +541,18 @@ extension ImportController {
             try persist()
             if let scope = try currentConsentScope(), !environment.consent.allows(scope) { consentRequest = scope; return }
         } catch { errorMessage = error.localizedDescription; return }
-        busyMessage = "正在想一想怎么安排…"
-        operation = Task {
-            defer { busyMessage = nil }
-            do {
+        let preferences = environment.preferences
+        let profile = preferences.activeProfile
+        let configuration = profile?.configuration ?? preferences.configuration
+        let key: String
+        do { key = AppIdentity.usesFixtureModel ? "" : try profile.map { try preferences.profileKey($0) } ?? "" }
+        catch { errorMessage = error.localizedDescription; return }
+        let inputSession = session, prompts = preferences.promptSettings
+        let calendars = preferences.categoryRoutingEnabled ? environment.calendars.calendars : []
+        let candidates = calendars.enumerated().map { CalendarCandidate(id: "calendar-\($0.offset)", name: $0.element.title) }
+        let identifiers = Dictionary(uniqueKeysWithValues: zip(candidates.map(\.id), calendars.map(\.id)))
+        busyMessage = "正在帮你安排…"
+        operation = environment.modelJobs.start(kind: .planning, work: { [self] context in
                 let zone = TimeZone(identifier: session.referenceTimeZone) ?? .current
                 let now = Date.now
                 guard conversation.end > now else { throw ShikeError.message("安排范围已经过去，请调整日期后再试。") }
@@ -543,31 +567,28 @@ extension ImportController {
                     events = try await environment.calendars.events(in: DateInterval(start: range.start.addingTimeInterval(-172800), end: range.end.addingTimeInterval(172800)), calendarIDs: ids)
                 } else { events = nil }
                 let free = events.map { Scheduling.freeIntervals(in: range, busy: $0.filter(\.blocksTime).map { $0.interval(in: zone) }) }
+                guard (preferences.activeProfile?.configuration ?? preferences.configuration) == configuration else {
+                    throw ShikeError.message("接口已变化，请重新发起安排。")
+                }
                 // Recheck after calendar IO so revocation/configuration changes cannot race a request.
                 if let scope = try currentConsentScope(), !environment.consent.allows(scope) {
                     consentRequest = scope
                     throw ShikeError.message("发送范围有变化，请确认后继续。")
                 }
-                let preferences = environment.preferences
-                let profile = preferences.activeProfile
-                let configuration = profile?.configuration ?? preferences.configuration
-                let calendars = preferences.categoryRoutingEnabled ? environment.calendars.calendars : []
-                let candidates = calendars.enumerated().map { CalendarCandidate(id: "calendar-\($0.offset)", name: $0.element.title) }
-                let identifiers = Dictionary(uniqueKeysWithValues: zip(candidates.map(\.id), calendars.map(\.id)))
                 let reply: PlanningReply
                 #if DEBUG
                 if AppIdentity.usesFixtureModel {
                     try await Task.sleep(for: .milliseconds(300))
                     reply = fixturePlanningReply(conversation, zone: zone)
                 } else {
-                    reply = try await environment.llmClient.plan(conversation: conversation, drafts: session.drafts, timeZone: zone,
-                        referenceDate: now, available: free, configuration: configuration, apiKey: profile.map { try preferences.profileKey($0) } ?? "",
-                        calendars: candidates, forcedCategory: session.forcedCategory, prompts: preferences.promptSettings, observer: modelObserver())
+                    reply = try await environment.llmClient.plan(conversation: conversation, drafts: inputSession.drafts, timeZone: zone,
+                        referenceDate: now, available: free, configuration: configuration, apiKey: key,
+                        calendars: candidates, forcedCategory: inputSession.forcedCategory, prompts: prompts, observer: context.observer(modelObserver()))
                 }
                 #else
-                reply = try await environment.llmClient.plan(conversation: conversation, drafts: session.drafts, timeZone: zone,
-                    referenceDate: now, available: free, configuration: configuration, apiKey: profile.map { try preferences.profileKey($0) } ?? "",
-                    calendars: candidates, forcedCategory: session.forcedCategory, prompts: preferences.promptSettings, observer: modelObserver())
+                reply = try await environment.llmClient.plan(conversation: conversation, drafts: inputSession.drafts, timeZone: zone,
+                    referenceDate: now, available: free, configuration: configuration, apiKey: key,
+                    calendars: candidates, forcedCategory: inputSession.forcedCategory, prompts: prompts, observer: context.observer(modelObserver()))
                 #endif
                 try Task.checkCancellation()
                 var updated = session
@@ -607,13 +628,21 @@ extension ImportController {
                     conflictAcknowledgements.removeAll()
                 }
                 updated.planning = conversation
-                guard let store = environment.store else { throw ShikeError.message("无法保存安排进度。") }
-                try store.save(updated); session = updated
                 conflictSnapshot = events ?? []
                 if events == nil { information = "尚未检查已有安排；允许日历访问后会在保存前补查。" }
-            } catch is CancellationError { information = "已取消，问答和原方案已保留。" }
-            catch { errorMessage = error.localizedDescription }
-        }
+                return .session(updated)
+        }, completion: { [self] result in
+            busyMessage = nil
+            switch result {
+            case .success(.session(let updated)):
+                session = updated
+                environment.modelJobs.applySessions(to: environment.store)
+            case .failure(let error):
+                if error is CancellationError { information = "已取消，问答和原方案已保留。" }
+                else { errorMessage = error.localizedDescription }
+            default: break
+            }
+        })
     }
 
     #if DEBUG

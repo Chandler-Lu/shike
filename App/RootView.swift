@@ -11,12 +11,16 @@ struct RootView: View {
     @StateObject private var countdownCoordinator: CountdownCoordinator
     @EnvironmentObject private var workspace: Workspace
     private var selection: Int { workspace.selection }
+    @ObservedObject private var modelJobs: ModelJobCenter
+    @State private var showsModelJobs = false
     @StateObject private var quickImport = QuickImportRouter.shared
     @StateObject private var countdownNavigation = CountdownNavigation()
     @StateObject private var shortcutInbox = ShortcutInbox.shared
 
     init(environment: AppEnvironment) {
         self.environment = environment
+        _modelJobs = ObservedObject(wrappedValue: environment.modelJobs)
+        environment.modelJobs.applySessions(to: environment.store)
         _countdownCoordinator = StateObject(wrappedValue: CountdownCoordinator(store: environment.countdowns, preferences: environment.preferences))
         let unfinished = (try? environment.store?.all())?.first { (!$0.text.isEmpty || !$0.pendingImages.isEmpty) && ($0.drafts.isEmpty || $0.savedCount < $0.drafts.count) }
         _controller = StateObject(wrappedValue: ImportController(environment: environment, session: unfinished ?? ImportSession()))
@@ -50,6 +54,25 @@ struct RootView: View {
                 }
             }
         }.tint(Notebook.accent)
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if modelJobs.records.contains(where: { $0.status == .running || !$0.seen && $0.status == .completed }) {
+                    Button { showsModelJobs = true } label: {
+                        HStack {
+                            Image(systemName: "sparkles")
+                            Text(modelJobs.records.contains(where: { $0.status == .running }) ? "模型正在处理，可稍后查看" : "模型结果已就绪")
+                            Spacer(); Image(systemName: "chevron.right")
+                        }.font(.subheadline).padding(.horizontal, 22).padding(.vertical, 8)
+                    }.buttonStyle(.plain).background(Notebook.paper)
+                }
+            }
+            .sheet(isPresented: $showsModelJobs, onDismiss: refreshCurrentSession) {
+                ModelJobListView(jobs: modelJobs, environment: environment, reminders: countdownCoordinator.reminders).workspaceSheet()
+            }
+            .onChange(of: modelJobs.requestedID) { _, id in if id != nil { showsModelJobs = true } }
+            .onAppear {
+                modelJobs.applySessions(to: environment.store)
+                if modelJobs.requestedID != nil { showsModelJobs = true }
+            }
             .onOpenURL { url in
                 guard CountdownRoute(url: url) != nil else { return }
                 countdownNavigation.open(url); workspace.selection = 4
@@ -65,7 +88,7 @@ struct RootView: View {
                 if scenePhase == .active { countdownCoordinator.sync.refresh() }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { environment.refresh(); countdownCoordinator.refresh(); environment.backups.schedule(); environment.backups.checkCloudBackup(); shortcutInbox.refresh() }
+                if phase == .active { modelJobs.applySessions(to: environment.store); refreshCurrentSession(); environment.refresh(); countdownCoordinator.refresh(); environment.backups.schedule(); environment.backups.checkCloudBackup(); shortcutInbox.refresh() }
                 if (phase == .background || PlatformSupport.isMac && phase == .inactive) && selection == 0 { controller.persistReportingError() }
                 if phase == .background || PlatformSupport.isMac && phase == .inactive { environment.backups.schedule(immediately: true) }
             }
@@ -78,6 +101,12 @@ struct RootView: View {
                     } catch { controller.errorMessage = error.localizedDescription }
                 }
             }
+    }
+    private func refreshCurrentSession() {
+        guard !controller.isBusy, controller.review == nil, !controller.showsPlanning else { return }
+        do {
+            if let latest = try environment.store?.all().first(where: { $0.id == controller.session.id }) { controller.session = latest }
+        } catch { controller.errorMessage = error.localizedDescription }
     }
 }
 
@@ -340,11 +369,14 @@ struct HomeView: View {
             let previous = try controller.environment.store?.all().first { $0.id == request.id }
             var session = previous ?? ImportSession(source: request.source)
             session.id = request.id
-            if previous == nil { session.text = request.text; session.createdAt = request.createdAt }
+            if previous == nil { session.text = request.text; session.createdAt = request.createdAt; session.pendingImages = request.images ?? [] }
             controller.session = session
             try controller.persist()
             try shortcutInbox.consume(request.id)
-            if !session.hasParsed { controller.parse() }
+            if !session.pendingImages.isEmpty {
+                // The durable session owns the staged images before the queue item is acknowledged.
+                controller.resumeImages(parseAfterRecognition: true)
+            } else if !session.hasParsed { controller.parse() }
         } catch { controller.errorMessage = "捷径导入失败，内容仍已保留：" + error.localizedDescription }
         return true
     }

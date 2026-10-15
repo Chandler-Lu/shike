@@ -86,7 +86,7 @@ public struct APIProfile: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-public struct APIModel: Decodable, Identifiable, Equatable, Sendable {
+public struct APIModel: Codable, Identifiable, Equatable, Sendable {
     public let id: String
     public let ownedBy: String?
     public init(id: String, ownedBy: String? = nil) { self.id = id; self.ownedBy = ownedBy }

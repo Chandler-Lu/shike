@@ -57,7 +57,7 @@ final class CompanionBackupTests: XCTestCase {
         let first = try await files.mirror(to: cloud)
         let again = try await files.mirror(to: cloud)
         let locals = try await files.list()
-        XCTAssertEqual(first, again); XCTAssertEqual(first.count, 30); XCTAssertEqual(locals.count, 30)
+        XCTAssertEqual(first, again); XCTAssertEqual(first.count, 20); XCTAssertEqual(locals.count, 20)
         XCTAssertFalse(FileManager.default.fileExists(atPath: expired.path))
         XCTAssertEqual(try Data(contentsOf: otherDevice), data)
         XCTAssertEqual(try Data(contentsOf: unrelated), Data("keep".utf8))
@@ -262,8 +262,14 @@ final class CompanionBackupTests: XCTestCase {
         let files = AppBackupFiles(directory: folder, deviceID: "test", containerID: "unused")
         let data = try makeBackup(entries: [Countdown(title: "本地备份")]).data()
         for i in 0..<32 { _ = try await files.save(data, reason: "Auto", now: Date(timeIntervalSince1970: 1_800_000_000 + Double(i))) }
-        let backups = try await files.list(); XCTAssertEqual(backups.count, 30)
+        let backups = try await files.list(); XCTAssertEqual(backups.count, 20)
         XCTAssertTrue(backups.first!.lastPathComponent.contains("1800000031000"))
+        XCTAssertTrue(backups.last!.lastPathComponent.contains("1800000012000"))
+        // Older installs may already contain 30 files. Reading enforces the new cap even without new data.
+        for i in 0..<10 { try data.write(to: folder.appendingPathComponent("Shike_170000000\(i)_Auto_old.json")) }
+        let restored = AppBackupFiles(directory: folder, deviceID: "test", containerID: "unused")
+        let trimmed = try await restored.list()
+        XCTAssertEqual(trimmed, backups)
         for url in backups { XCTAssertEqual(try AppDataImport(data: Data(contentsOf: url)).backup.countdowns.first?.title, "本地备份") }
     }
     @MainActor func testWidgetsRenderEverySizeAndEmptyStates() throws {

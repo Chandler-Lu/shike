@@ -33,6 +33,7 @@ struct BackupUploadProgress: Equatable, Sendable {
 }
 
 actor AppBackupFiles {
+    static let retentionLimit = 20
     let directory: URL
     let deviceID: String
     let containerID: String
@@ -50,6 +51,7 @@ actor AppBackupFiles {
     }
     func list() throws -> [URL] {
         guard FileManager.default.fileExists(atPath: directory.path) else { return [] }
+        try prune(directory)
         return try files(in: directory)
     }
     private func files(in folder: URL) throws -> [URL] {
@@ -58,7 +60,7 @@ actor AppBackupFiles {
             .sorted { $0.lastPathComponent > $1.lastPathComponent }
     }
     private func prune(_ folder: URL) throws {
-        for url in try files(in: folder).dropFirst(30) { try FileManager.default.removeItem(at: url) }
+        for url in try files(in: folder).dropFirst(Self.retentionLimit) { try FileManager.default.removeItem(at: url) }
     }
     static func validateCloudRegistration(_ info: [String: Any], containerID: String) throws {
         let containers = info["NSUbiquitousContainers"] as? [String: [String: Any]]

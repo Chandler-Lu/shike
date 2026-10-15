@@ -23,6 +23,43 @@ final class ShortcutAndArtworkTests: XCTestCase {
         XCTAssertNil(restored.pending)
         XCTAssertThrowsError(try inbox.enqueue(text: String(repeating: "a", count: 120_001), source: "test"))
     }
+    @MainActor func testShareInboxRetainsImageOnlyInputAndReadsOlderTextRequests() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let image = try ImageStaging.write(Data([1, 2, 3]))
+        defer { ImageStaging.remove(image) }
+        let inbox = ShortcutInbox(directory: folder)
+        try inbox.enqueue(text: "", source: "分享", images: [image])
+        let restored = ShortcutInbox(directory: folder)
+        XCTAssertEqual(restored.pending?.images, [image])
+        XCTAssertEqual(restored.pending?.text, "")
+        XCTAssertThrowsError(try inbox.enqueue(text: "", source: "分享", images: ["../bad.image"]))
+        let old = #"{"id":"00000000-0000-0000-0000-000000000001","createdAt":0,"text":"旧输入","source":"捷径文字"}"#
+        let decoded = try JSONDecoder().decode(ShortcutInput.self, from: Data(old.utf8))
+        XCTAssertNil(decoded.images); XCTAssertEqual(decoded.text, "旧输入")
+    }
+    @MainActor func testExportFreezesSelectedUnitTimeAndZoneAcrossArtworkChanges() throws {
+        var entry = Countdown(title: "一起长大", date: CivilDate(year: 2020, month: 2, day: 29))
+        entry.timeZoneIdentifier = "Asia/Shanghai"
+        let now = try XCTUnwrap(ISO8601DateFormatter().date(from: "2026-10-15T10:00:00+08:00"))
+        var exports: [CountdownImageExport] = []
+        defer { for item in exports { try? FileManager.default.removeItem(at: item.url) } }
+        for unit in CountdownCountUnit.allCases {
+            let export = try CountdownImageExport.make(entry: entry, category: nil, now: now, art: .original, unit: unit)
+            exports.append(export)
+            XCTAssertEqual(export.value.unit, unit)
+            XCTAssertEqual(export.value.label, CountdownDisplayValue(entry, now: now, unit: unit).label)
+            XCTAssertEqual(export.entry.timeZoneIdentifier, "Asia/Shanghai")
+        }
+        XCTAssertEqual(Set(exports.map(\.data)).count, 4)
+        let years = try XCTUnwrap(exports.last)
+        let changed = try CountdownImageExport.make(entry: years.entry, category: nil, now: years.now,
+            art: CountdownArtwork.all.first { $0.kind == .cat }!, unit: years.value.unit)
+        exports.append(changed)
+        XCTAssertEqual(changed.value, years.value)
+        XCTAssertEqual(changed.now, now)
+        XCTAssertEqual(changed.value.components.map(\.unit), [.years, .months, .days])
+    }
     @MainActor func testScreenshotIntentRecognizesNativeImageAndQueuesOnlyText() async throws {
         let image = UIGraphicsImageRenderer(size: CGSize(width: 1000, height: 300)).image { context in
             UIColor.white.setFill(); context.fill(CGRect(x: 0, y: 0, width: 1000, height: 300))
@@ -30,7 +67,7 @@ final class ShortcutAndArtworkTests: XCTestCase {
         }
         // Isolate from any pre-existing shortcuts; the action writes through the same durable queue.
         XCTAssertNil(ShortcutInbox.shared.pending)
-        var intent = ExtractScheduleImageIntent()
+        let intent = ExtractScheduleImageIntent()
         intent.image = IntentFile(data: try XCTUnwrap(image.pngData()), filename: "screen.png", type: .png)
         _ = try await intent.perform()
         let request = try XCTUnwrap(ShortcutInbox.shared.pending)

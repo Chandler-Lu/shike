@@ -1,6 +1,6 @@
 import Foundation
 
-public struct CountdownDraft: Identifiable, Equatable, Sendable {
+public struct CountdownDraft: Codable, Identifiable, Equatable, Sendable {
     public var id: UUID { entry.id }
     public var entry: Countdown
     public var dateMissing: Bool

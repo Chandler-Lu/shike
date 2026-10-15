@@ -52,6 +52,9 @@ struct SettingsView: View {
                     cloudSettings
                     DataExportView(environment: environment)
 
+                    NavigationLink {
+                        ModelJobListView(jobs: environment.modelJobs, environment: environment, reminders: CountdownReminderService())
+                    } label: { Label("模型任务与结果", systemImage: "sparkles").frame(minHeight: 44) }
                     usageTips
 
                     DisclosureGroup {
@@ -95,7 +98,7 @@ struct SettingsView: View {
             VStack(alignment: .leading, spacing: 18) {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("从分享菜单导入", systemImage: "square.and.arrow.up").foregroundStyle(Notebook.ink)
-                    Text("在其他 App 中选中文字或图片，打开分享菜单，选择「拾刻计划」，就能整理成日程。若未显示，可在分享菜单的「更多」中启用。")
+                    Text("在其他 App 中选中文字或图片，打开分享菜单，选择「拾刻计划」保存内容，再打开主 App 识别、核对并加入日历。若未显示，可在分享菜单的「更多」中启用。")
                         .accessibilityIdentifier("sharingTip")
                 }
                 VStack(alignment: .leading, spacing: 8) {
@@ -441,7 +444,7 @@ private struct ModelAPISettingsView: View {
             Divider()
             fieldLabel("API Key")
             SecureField("填写你的 API Key", text: $key).accessibilityIdentifier("apiKey").focused($inputFocused)
-            Text(preferences.iCloudEnabled ? "Key 使用 iCloud 钥匙串同步，主 App 和分享面板共用。" : "Key 保存在此设备的钥匙串中，主 App 和分享面板共用。")
+            Text(preferences.iCloudEnabled ? "Key 使用 iCloud 钥匙串同步。" : "Key 保存在此设备的钥匙串中。")
                 .font(.caption).foregroundStyle(Notebook.secondaryInk)
             Divider()
             Button {
@@ -523,7 +526,7 @@ private struct ModelAPISettingsView: View {
             .onChange(of: key) { _, _ in invalidateModels() }
             .onChange(of: configuration.format) { _, _ in invalidateModels() }
             .onChange(of: configuration.model) { _, _ in if testing { invalidateRequest() } }
-            .onDisappear { invalidateRequest() }
+
             .sheet(isPresented: $showModels) {
                 ModelSelectionView(models: models, selection: $configuration.model).presentationDetents([.large])
             }
@@ -576,25 +579,29 @@ private struct ModelAPISettingsView: View {
         let id = UUID(); requestID = id
         fetchingModels = true; message = nil
         let config = configuration; let currentKey = key
-        operation = Task {
-            defer { if requestID == id { fetchingModels = false } }
-            do {
+        operation = ModelJobCenter.shared.start(id: id, kind: .models, work: { context in
                 let result: [APIModel]
                 #if DEBUG
                 if AppIdentity.isUITesting && ProcessInfo.processInfo.arguments.contains("-model-list-fixture") {
                     try await Task.sleep(for: .milliseconds(200))
                     result = [APIModel(id: "test-chat-alpha", ownedBy: "测试服务"), APIModel(id: "test-chat-beta", ownedBy: "测试服务")]
-                } else { result = try await LLMClient().listModels(configuration: config, apiKey: currentKey) }
+                } else { result = try await LLMClient().listModels(configuration: config, apiKey: currentKey, observer: context.observer()) }
                 #else
-                result = try await LLMClient().listModels(configuration: config, apiKey: currentKey)
+                result = try await LLMClient().listModels(configuration: config, apiKey: currentKey, observer: context.observer())
                 #endif
-                guard requestID == id else { return }
-                models = result; isError = false
-                message = result.isEmpty ? "接口未返回可用模型，可以直接填写自定义 ID。" : "已获取 \(result.count) 个模型，选择后记得保存配置。"
-                showModels = !result.isEmpty
-            } catch is CancellationError { }
-            catch { if requestID == id { message = error.localizedDescription; isError = true } }
-        }
+                return .models(result)
+        }, completion: { result in
+            guard requestID == id else { return }
+            fetchingModels = false
+            switch result {
+            case .success(.models(let values)):
+                models = values; isError = false
+                message = values.isEmpty ? "接口未返回可用模型，可以直接填写自定义 ID。" : "已获取 \(values.count) 个模型，选择后记得保存配置。"
+                showModels = !values.isEmpty
+            case .failure(let error): if !(error is CancellationError) { message = error.localizedDescription; isError = true }
+            default: break
+            }
+        })
     }
     private func testConnection() {
         let id = UUID(); requestID = id
@@ -609,11 +616,9 @@ private struct ModelAPISettingsView: View {
             client = LLMClient(session: URLSession(configuration: config))
         }
         #endif
-        operation = Task {
-            defer { if requestID == id { testing = false } }
-            do {
+        operation = ModelJobCenter.shared.start(id: id, kind: .connection, work: { context in
                 let events = try await client.extract(text: "2026年12月15日下午2点到3点，在线测试会议。", referenceDate: .now,
-                                                         timeZone: .current, configuration: currentConfig, apiKey: currentKey, observer: { update in
+                                                         timeZone: .current, configuration: currentConfig, apiKey: currentKey, observer: context.observer { update in
                     Task { @MainActor in
                         guard requestID == id else { return }
                         switch update {
@@ -623,11 +628,18 @@ private struct ModelAPISettingsView: View {
                     }
                 })
                 guard !events.isEmpty else { throw ShikeError.message("接口已连接，但未能提取示例日程，请检查模型是否适合此任务。") }
-                guard requestID == id else { return }
-                message = "连接成功，模型已返回可读取的日程。"; isError = false
-            } catch is CancellationError { if requestID == id { message = "已取消测试。"; isError = false } }
-            catch { if requestID == id { message = error.localizedDescription; isError = true } }
-        }
+                return .connection("连接成功，模型已返回可读取的日程。")
+        }, completion: { result in
+            guard requestID == id else { return }
+            testing = false
+            switch result {
+            case .success(.connection(let text)): message = text; isError = false
+            case .failure(let error):
+                message = error is CancellationError ? "已取消测试。" : error.localizedDescription
+                isError = !(error is CancellationError)
+            default: break
+            }
+        })
     }
 }
 

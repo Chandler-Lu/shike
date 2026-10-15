@@ -224,6 +224,11 @@ public enum CountdownCountUnit: CaseIterable, Sendable {
 }
 
 /// Structured presentation shared by cards and widgets; the stored countdown is unchanged.
+public struct CountdownCountComponent: Equatable, Sendable {
+    public let value: Int
+    public let unit: CountdownCountUnit
+}
+
 public struct CountdownDisplayValue: Equatable, Sendable {
     public enum Phase: Sendable { case upcoming, today, elapsed }
     public let phase: Phase
@@ -234,6 +239,7 @@ public struct CountdownDisplayValue: Equatable, Sendable {
     public let unit: CountdownCountUnit
     public let count: Int
     public let remainder: String?
+    public let components: [CountdownCountComponent]
     public var status: String { phase == .today ? "就是今天" : phase == .elapsed ? "已经" : "还有" }
     public var label: String {
         if phase == .today && unit == .days { return status }
@@ -264,8 +270,10 @@ public struct CountdownDisplayValue: Equatable, Sendable {
         switch unit {
         case .days:
             count = days; remainder = nil; time = dayTime
+            components = [.init(value: days, unit: .days)]
         case .weeks:
             count = days / 7; remainder = days % 7 == 0 ? nil : "\(days % 7) 天"; time = dayTime
+            components = [.init(value: days / 7, unit: .weeks), .init(value: days % 7, unit: .days)]
         case .months, .years:
             let calendar = CountdownDates.calendar(entry, systemZone: systemZone)
             let start: Date
@@ -284,6 +292,9 @@ public struct CountdownDisplayValue: Equatable, Sendable {
             let fields: Set<Calendar.Component> = unit == .years ? [.year, .month, .day, .hour, .minute, .second] : [.month, .day, .hour, .minute, .second]
             let parts = calendar.dateComponents(fields, from: start, to: end)
             count = max(0, unit == .years ? parts.year ?? 0 : parts.month ?? 0)
+            components = [.init(value: count, unit: unit)]
+                + (unit == .years ? [.init(value: max(0, parts.month ?? 0), unit: .months)] : [])
+                + [.init(value: max(0, parts.day ?? 0), unit: .days)]
             var rest: [String] = []
             if unit == .years, let months = parts.month, months > 0 { rest.append("\(months) 个月") }
             if let days = parts.day, days > 0 { rest.append("\(days) 天") }

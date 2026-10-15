@@ -30,14 +30,17 @@ public struct LLMClient: Sendable {
             return URLSession(configuration: config, delegate: SameOriginRedirectDelegate(), delegateQueue: nil)
     }()
 
-    public func listModels(configuration: APIConfiguration, apiKey: String) async throws -> [APIModel] {
+    public func listModels(configuration: APIConfiguration, apiKey: String, observer: LLMObserver? = nil) async throws -> [APIModel] {
         let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else { throw ShikeError.message("请先填写接口地址和 API Key，再获取模型。") }
         let endpoint = try configuration.modelsEndpoint()
         var models: [String: APIModel] = [:]
         var cursor: String?
         var cursors = Set<String>()
+        let started = ProcessInfo.processInfo.systemUptime
+        var receivedBytes = 0
         for _ in 0..<100 {
+            observer?(.progress(LLMProgress(stage: .connecting, elapsed: ProcessInfo.processInfo.systemUptime - started, attempt: 1, receivedBytes: receivedBytes)))
             try Task.checkCancellation()
             var url = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
             if let cursor {
@@ -66,6 +69,8 @@ public struct LLMClient: Sendable {
             default: throw ShikeError.message("获取模型失败（HTTP \(response.statusCode)），可手动填写模型 ID。")
             }
             guard data.count <= 5_000_000 else { throw ShikeError.message("模型列表过长，请使用自定义模型 ID。") }
+            receivedBytes += data.count
+            observer?(.progress(LLMProgress(stage: .receiving, elapsed: ProcessInfo.processInfo.systemUptime - started, attempt: 1, receivedBytes: receivedBytes)))
             let pageModels: [APIModel]; let next: String?
             if configuration.format == .gemini {
                 guard let page = try? JSONDecoder().decode(GeminiModelList.self, from: data) else {

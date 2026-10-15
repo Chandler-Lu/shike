@@ -1,5 +1,6 @@
 import UIKit
 import Photos
+import UserNotifications
 import ShikeCore
 
 enum QuickImportAction: String {
@@ -21,6 +22,10 @@ enum QuickImportAction: String {
 extension Notification.Name { static let shikeCloudPush = Notification.Name("shikeCloudPush") }
 
 final class QuickActionAppDelegate: NSObject, UIApplicationDelegate {
+    func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        UNUserNotificationCenter.current().delegate = ModelJobNotificationDelegate.shared
+        return true
+    }
     func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable: Any],
                      fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) {
         Task { @MainActor in

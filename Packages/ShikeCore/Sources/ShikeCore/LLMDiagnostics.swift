@@ -5,6 +5,7 @@ public struct LLMProgress: Sendable {
     public let stage: Stage
     public let elapsed: TimeInterval
     public let attempt: Int
+    public var receivedBytes: Int = 0
     public var message: String {
         let label: String
         switch stage {

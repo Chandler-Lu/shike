@@ -446,7 +446,9 @@ struct CountdownCard: View {
     private func countContent(alignment: HorizontalAlignment) -> some View {
         let value = CountdownDisplayValue(entry, now: now, unit: countUnit)
         return VStack(alignment: alignment, spacing: 3) {
-            if value.phase == .today && countUnit == .days {
+            if countUnit != .days && !compact {
+                CountdownCountColumns(value: value)
+            } else if value.phase == .today && countUnit == .days {
                 Text(value.status).font(Notebook.handwriting(compact ? 23 : 30, relativeTo: .title))
                     .lineLimit(1).minimumScaleFactor(0.7)
             } else {
@@ -476,6 +478,29 @@ struct CountdownCard: View {
     }
 }
 
+/// Equal-width components keep every unit readable without leaving the right half empty.
+private struct CountdownCountColumns: View {
+    let value: CountdownDisplayValue
+    var numberSize: CGFloat = 36
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(value.status).font(.caption)
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                ForEach(Array(value.components.enumerated()), id: \.offset) { _, component in
+                    VStack(spacing: 4) {
+                        Text("\(component.value)").font(Notebook.handwriting(numberSize, relativeTo: .title))
+                            .monospacedDigit().lineLimit(1).minimumScaleFactor(0.5)
+                        Text(component.unit.title).font(Notebook.handwriting(19, relativeTo: .body))
+                            .lineLimit(1).minimumScaleFactor(0.7)
+                    }.frame(maxWidth: .infinity)
+                }
+            }
+            if let time = value.time { Text(time).font(.system(.body, design: .monospaced)).monospacedDigit() }
+        }.frame(maxWidth: .infinity).padding(.vertical, 8).foregroundStyle(Notebook.accent)
+            .accessibilityElement(children: .ignore).accessibilityLabel(value.label)
+    }
+}
+
 struct CountdownDetail: View {
     @ObservedObject var store: CountdownStore
     @ObservedObject var reminders: CountdownReminderService
@@ -488,7 +513,7 @@ struct CountdownDetail: View {
     @State private var error: String?
     @State private var countUnit: CountdownCountUnit = .days
     private var entry: Countdown? { store.entries.first { $0.id == id } }
-    private func closeDetail() { if let onClose { onClose() } else { dismiss() } }
+    private func closeDetail() { countUnit = .days; if let onClose { onClose() } else { dismiss() } }
     var body: some View {
         NavigationStack {
             ZStack {
@@ -538,7 +563,7 @@ struct CountdownDetail: View {
                                 do { try store.save(value) } catch { self.error = error.localizedDescription }
                             }.buttonStyle(InkButtonStyle(prominent: false)).accessibilityIdentifier("pinCountdown")
                             Button {
-                                do { imageExport = try CountdownImageExport.make(entry: entry, category: store.categories.first { $0.id == entry.categoryID }?.name) }
+                                do { imageExport = try CountdownImageExport.make(entry: entry, category: store.categories.first { $0.id == entry.categoryID }?.name, unit: countUnit) }
                                 catch { self.error = error.localizedDescription }
                             } label: { Label("导出卡片图片", systemImage: "square.and.arrow.up") }
                                 .buttonStyle(InkButtonStyle(prominent: false)).accessibilityIdentifier("exportCountdownImage")
@@ -560,7 +585,7 @@ struct CountdownDetail: View {
                 } message: { Text("开启 iCloud 同步时，其他设备上的这条记录也会删除。") }
         }.tint(Notebook.accent)
             .onChange(of: id) { _, _ in countUnit = .days }
-            .onDisappear { countUnit = .days }
+
     }
 }
 
@@ -821,8 +846,13 @@ struct CountdownImageExport: Identifiable {
     let category: String?
     let now: Date
     let art: CountdownArtwork
-    @MainActor static func make(entry: Countdown, category: String?, now: Date = .now, art: CountdownArtwork = .preferred) throws -> Self {
-        let content = CountdownShareCard(entry: entry, category: category, now: now, art: art)
+    let value: CountdownDisplayValue
+    @MainActor static func make(entry: Countdown, category: String?, now: Date = .now, art: CountdownArtwork = .preferred, unit: CountdownCountUnit = .days) throws -> Self {
+        var entry = entry
+        // Freeze the system zone together with the date and unit for preview/artwork changes.
+        entry.timeZoneIdentifier = entry.timeZone().identifier
+        let value = CountdownDisplayValue(entry, now: now, unit: unit)
+        let content = CountdownShareCard(entry: entry, category: category, now: now, art: art, value: value)
             .foregroundStyle(Notebook.ink).environment(\.colorScheme, .light).environment(\.dynamicTypeSize, .large)
         let renderer = ImageRenderer(content: content); renderer.scale = 2; renderer.isOpaque = true
         guard let image = renderer.uiImage, let data = image.pngData() else { throw ShikeError.message("图片生成失败，请重试。") }
@@ -835,7 +865,7 @@ struct CountdownImageExport: Identifiable {
         }
         let url = folder.appendingPathComponent("Shike_Countdown_\(UUID().uuidString).png")
         try data.write(to: url, options: .atomic)
-        return Self(title: entry.title, image: image, data: data, url: url, entry: entry, category: category, now: now, art: art)
+        return Self(title: entry.title, image: image, data: data, url: url, entry: entry, category: category, now: now, art: art, value: value)
     }
 }
 
@@ -845,6 +875,7 @@ private struct CountdownShareCard: View {
     let category: String?
     let now: Date
     let art: CountdownArtwork
+    let value: CountdownDisplayValue
     var chooseArtwork: (() -> Void)?
     private var note: String {
         let value = entry.notes.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -872,9 +903,11 @@ private struct CountdownShareCard: View {
             }
             Text(entry.title).font(Notebook.handwriting(36)).fixedSize(horizontal: false, vertical: true)
             VStack(alignment: .leading, spacing: 12) {
-                Text(CountdownDates.label(entry, now: now))
-                    .font(Notebook.handwriting(entry.targetTime == nil ? 50 : 38))
-                    .monospacedDigit().foregroundStyle(Notebook.blue).fixedSize(horizontal: false, vertical: true)
+                if value.unit == .days {
+                    Text(value.label)
+                        .font(Notebook.handwriting(entry.targetTime == nil ? 50 : 38))
+                        .monospacedDigit().foregroundStyle(Notebook.blue).fixedSize(horizontal: false, vertical: true)
+                } else { CountdownCountColumns(value: value, numberSize: 50) }
                 Capsule().fill(Notebook.yellow).frame(width: 96, height: 7).rotationEffect(.degrees(-2))
                 if entry.includesStartDay == true {
                     Text(entry.targetTime != nil && CountdownDates.elapsedDays(entry, now: now) >= 1
@@ -882,6 +915,7 @@ private struct CountdownShareCard: View {
                         .font(Notebook.handwriting(18)).foregroundStyle(Notebook.secondaryInk)
                 }
             }.padding(.vertical, 8)
+                .accessibilityElement(children: .ignore).accessibilityLabel(value.label).accessibilityIdentifier("exportCountdownCount")
             VStack(alignment: .leading, spacing: 10) {
                 Text(entry.recurrence == .none ? "记住这一天" : "最初的日子").font(Notebook.handwriting(18)).foregroundStyle(Notebook.secondaryInk)
                 if let anchor = entry.anchorDate.date(in: entry.timeZone()) {
@@ -941,7 +975,7 @@ private struct CountdownImagePreview: View {
                 VStack(spacing: 22) {
                     GeometryReader { geometry in
                         CountdownShareCard(entry: export.entry, category: export.category, now: export.now,
-                                           art: export.art, chooseArtwork: { choosingArt = true })
+                                           art: export.art, value: export.value, chooseArtwork: { choosingArt = true })
                             .foregroundStyle(Notebook.ink).environment(\.colorScheme, .light).environment(\.dynamicTypeSize, .large)
                             .fixedSize().scaleEffect(geometry.size.width / 560, anchor: .topLeading)
                             .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
@@ -952,11 +986,11 @@ private struct CountdownImagePreview: View {
                     if let message { NoteMessage(text: message, isError: failed) }
                 }.padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity)
             } }.navigationTitle("卡片图片").navigationBarTitleDisplayMode(.inline)
-                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+                .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() }.accessibilityIdentifier("closeCountdownExport") } }
                 .sheet(isPresented: $choosingArt) {
                     CountdownArtworkPicker(selected: export.art) { art in
                         do {
-                            let next = try CountdownImageExport.make(entry: export.entry, category: export.category, now: export.now, art: art)
+                            let next = try CountdownImageExport.make(entry: export.entry, category: export.category, now: export.now, art: art, unit: export.value.unit)
                             export = next; art.remember(); message = nil
                         } catch { message = error.localizedDescription; failed = true }
                     }.workspaceSheet()
