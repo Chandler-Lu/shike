@@ -109,7 +109,7 @@ struct SettingsView: View {
                 }
                 VStack(alignment: .leading, spacing: 8) {
                     Label("在输入框中说下安排", systemImage: "mic").foregroundStyle(Notebook.ink)
-                    Text("点击首页输入框右下角、放大按钮左侧的麦克风，即可开始录音，转写文字会直接追加到原文。再点一次停止，然后可以修改文字，选择「帮我安排」或「提取日程」。")
+                    Text("点击首页输入框右下角、放大按钮左侧的麦克风，即可开始录音，转写文字会直接追加到原文，再点一次停止。")
                 }
             }.font(.subheadline).foregroundStyle(Notebook.secondaryInk).padding(.top, 12)
         } label: {
@@ -148,7 +148,7 @@ struct SettingsView: View {
                                 set: { preferences.setCategoryCalendar($0, for: category) }), fallback: "AI 按名称匹配")
                                 .accessibilityIdentifier("categoryCalendar-\(category.rawValue)")
                         }
-                        Text("AI 无法确定或指定日历不可用时，使用默认日历。只影响新识别的日程；原文和候选日历名称会发送到所选接口，已有日历事件不会发送。")
+                        Text("AI 无法确定或指定日历不可用时，使用默认日历；原文和候选日历名称会发送到所选接口")
                             .font(.caption).foregroundStyle(Notebook.secondaryInk)
                     } else {
                         Text("允许日历访问后，即可为每个类别选择日历。").font(.caption).foregroundStyle(Notebook.secondaryInk)
@@ -205,7 +205,7 @@ struct SettingsView: View {
                                 Text(diagnostic).font(.caption).textSelection(.enabled).padding(.top, 8)
                             }.font(.subheadline)
                         }
-                        Text("在其他设备也开启此开关。已有云端设置会优先载入；首次使用则上传本机已保存的设置。关闭只停止本设备同步。")
+                        Text("在其他设备也开启此开关，已有云端设置会优先载入；如首次使用则上传本机已保存的设置；关闭只停止本设备同步。")
                             .font(.caption).foregroundStyle(Notebook.secondaryInk)
                     }
                     if let syncError { NoteMessage(text: syncError, isError: true) }
@@ -483,7 +483,7 @@ private struct ModelAPISettingsView: View {
             } label: {
                 HStack { if testing { ProgressView() }; Text(testing ? "取消测试" : "测试连接") }
             }.buttonStyle(InkButtonStyle(prominent: false)).disabled(fetchingModels).accessibilityIdentifier("testAPI")
-            Text("测试连接会发送一条示例日程，可能产生少量调用费用。获取列表不会发送日程内容。")
+            Text("测试连接会发送一条示例日程，可能产生少量调用费用。")
                 .font(.caption).foregroundStyle(Notebook.secondaryInk)
             if testing, let testProgress { Text(testProgress).font(.caption).foregroundStyle(Notebook.secondaryInk) }
             if let message { NoteMessage(text: message, isError: isError).accessibilityIdentifier("apiStatus") }

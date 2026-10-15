@@ -52,7 +52,8 @@ final class NativeServiceTests: XCTestCase {
         controller.advancePlanning(); controller.allowExtraction(); try await waitForOperation(controller)
         XCTAssertNil(controller.errorMessage); XCTAssertEqual(PlanningNativeTransport.requests.count, 1)
         XCTAssertEqual(controller.session.planning?.turns.count, 1)
-        controller.advancePlanning(answer: "半小时"); try await waitForOperation(controller)
+        PlanningNativeTransport.setResponse(#"{"kind":"question","message":"每次希望安排多久？","options":["半小时","一小时"]}"#)
+        controller.advancePlanning(answer: "晚上"); try await waitForOperation(controller)
         XCTAssertEqual(controller.session.planning?.turns.count, 3)
         XCTAssertEqual(try store.all().first?.planning, controller.session.planning)
         let request = try XCTUnwrap(PlanningNativeTransport.requests.first)
@@ -188,39 +189,95 @@ final class NativeServiceTests: XCTestCase {
         }
     }
 
-    @MainActor func testRestartPlanningPreservesRangeAndCalendarsButClearsGoalAnswersAndDrafts() throws {
+    @MainActor func testRestartPlanningClearsAnswersButResubmitsOriginalGoalRangeAndCalendars() async throws {
+        let zone = TimeZone(identifier: "Asia/Shanghai")!
         let start = Date.now.addingTimeInterval(86400), end = start.addingTimeInterval(3 * 86400)
-        let controller = try planningController(events: [], range: DateInterval(start: start, end: end), timeZone: TimeZone(identifier: "Asia/Shanghai")!)
-        var preferences = controller.environment.preferences.calendarPreferences
-        preferences.planningCalendars = []
-        controller.environment.preferences.setCalendarPreferences(preferences)
-        controller.session.planning?.turns = [PlanningTurn(role: "user", text: "每次半小时")]
+        let iso = ISO8601DateFormatter(); iso.timeZone = zone
+        let response = String(decoding: try JSONSerialization.data(withJSONObject: [
+            "kind": "proposal", "message": "已按要求重新安排", "events": [[
+                "title": "阅读计划", "start": iso.string(from: start.addingTimeInterval(3600)),
+                "end": iso.string(from: start.addingTimeInterval(5400)), "allDay": false
+            ]]
+        ]), as: UTF8.self)
+        for previouslySaved in [false, true] {
+            let controller = try planningController(events: [], range: DateInterval(start: start, end: end), timeZone: zone, response: response)
+            var preferences = controller.environment.preferences.calendarPreferences
+            preferences.planningCalendars = previouslySaved ? [controller.environment.calendars.readableCalendars[0].reference] : []
+            controller.environment.preferences.setCalendarPreferences(preferences)
+            controller.session.forcedCategory = .study
+            controller.session.planning?.turns = [PlanningTurn(role: "user", text: "每次半小时")]
+            controller.advancePlanning(); controller.allowExtraction(); try await waitForOperation(controller)
+            XCTAssertNil(controller.errorMessage)
+            XCTAssertEqual(PlanningNativeTransport.requests.count, 1)
+            if previouslySaved {
+                controller.session.drafts[0].eventIdentifier = "saved-plan-event"
+                controller.session.drafts[0].calendarItemIdentifier = "saved-plan-item"
+            }
+            let original = controller.session
+            controller.restartPlanning()
+            XCTAssertTrue(controller.isBusy, "点击后应直接发起安排")
+            XCTAssertNil(controller.consentRequest, "同一接口与发送范围无需再次确认")
+            XCTAssertEqual(controller.session.text, original.text)
+            XCTAssertEqual(controller.session.planning?.turns, [])
+            XCTAssertTrue(controller.session.drafts.isEmpty)
+            XCTAssertFalse(controller.session.planning?.hasProposal ?? true)
+            controller.restartPlanning() // Ignore repeat taps while generating.
+            try await waitForOperation(controller)
+            XCTAssertNil(controller.errorMessage)
+            XCTAssertEqual(PlanningNativeTransport.requests.count, 2)
+            XCTAssertEqual(controller.session.text, original.text)
+            XCTAssertEqual(controller.session.planning?.goal, original.planning?.goal)
+            XCTAssertEqual(controller.session.planning?.start, start)
+            XCTAssertEqual(controller.session.planning?.end, end)
+            XCTAssertEqual(controller.session.referenceTimeZone, original.referenceTimeZone)
+            XCTAssertEqual(controller.session.forcedCategory, .study)
+            XCTAssertEqual(controller.environment.preferences.calendarPreferences.planningCalendars, preferences.planningCalendars)
+            XCTAssertEqual(controller.session.planning?.turns.count, 1)
+            XCTAssertEqual(controller.session.planning?.turns.first?.role, "assistant")
+            XCTAssertEqual(controller.session.drafts.count, 1)
+            XCTAssertNotEqual(controller.session.drafts.first?.id, original.drafts.first?.id)
+            XCTAssertEqual(controller.session.savedCount, 0)
+            XCTAssertEqual(controller.session.hasParsed, true)
+            XCTAssertNotEqual(controller.session.id, original.id)
+            let body = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(PlanningNativeTransport.requests[1].utf8)) as? [String: Any])
+            let messages = try XCTUnwrap(body["messages"] as? [[String: Any]])
+            let input = try XCTUnwrap(messages.last?["content"] as? String)
+            let context = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any])
+            XCTAssertEqual(context["goal"] as? String, original.planning?.goal)
+            XCTAssertEqual(context["rangeStart"] as? String, iso.string(from: start))
+            XCTAssertEqual(context["rangeEndExclusive"] as? String, iso.string(from: end))
+            XCTAssertEqual(context["timeZone"] as? String, zone.identifier)
+            let turns = try XCTUnwrap(context["conversation"] as? [[String: String]])
+            XCTAssertTrue(turns.isEmpty)
+            XCTAssertTrue((context["currentProposal"] as? [[String: Any]])?.isEmpty == true)
+            let stored = try XCTUnwrap(controller.environment.store).all()
+            XCTAssertEqual(stored.first { $0.id == controller.session.id }?.planning, controller.session.planning)
+            XCTAssertEqual(stored.first { $0.id == original.id }?.drafts, original.drafts)
+            XCTAssertEqual(stored.first { $0.id == original.id }?.planning, original.planning)
+        }
+    }
+
+    @MainActor func testRestartPlanningFailureKeepsFreshGoalAndArchivesPreviousAnswers() async throws {
+        let start = Date.now.addingTimeInterval(86400), end = start.addingTimeInterval(86400)
+        let controller = try planningController(events: [], range: DateInterval(start: start, end: end), timeZone: .current)
+        controller.advancePlanning(); controller.allowExtraction(); try await waitForOperation(controller)
+        controller.session.planning?.turns.append(PlanningTurn(role: "user", text: "每次半小时"))
         controller.session.planning?.hasProposal = true
         controller.session.hasParsed = true
-        controller.session.drafts = [reviewEvent("旧方案")]
+        controller.session.drafts = [reviewEvent("上一版方案")]
         let original = controller.session
-        controller.restartPlanning()
+        PlanningNativeTransport.reset(response: "invalid-json")
+        controller.restartPlanning(); try await waitForOperation(controller)
+        XCTAssertNotNil(controller.errorMessage)
+        XCTAssertFalse(PlanningNativeTransport.requests.isEmpty)
         XCTAssertNotEqual(controller.session.id, original.id)
-        XCTAssertTrue(controller.session.text.isEmpty)
-        XCTAssertEqual(controller.session.displayTitle, "未填写的安排")
-        XCTAssertEqual(controller.session.planning?.goal, "")
+        XCTAssertEqual(controller.session.text, original.text)
+        XCTAssertEqual(controller.session.planning?.goal, original.planning?.goal)
         XCTAssertEqual(controller.session.planning?.turns, [])
         XCTAssertEqual(controller.session.planning?.start, start)
         XCTAssertEqual(controller.session.planning?.end, end)
-        XCTAssertEqual(controller.session.referenceTimeZone, original.referenceTimeZone)
         XCTAssertTrue(controller.session.drafts.isEmpty)
-        XCTAssertFalse(controller.session.hasParsed)
-        XCTAssertEqual(controller.environment.preferences.calendarPreferences.planningCalendars, [])
-        XCTAssertTrue(PlanningNativeTransport.requests.isEmpty)
-        let stored = try XCTUnwrap(controller.environment.store).all()
-        XCTAssertEqual(stored.first { $0.id == original.id }?.drafts, original.drafts)
-        XCTAssertEqual(stored.first { $0.id == controller.session.id }?.planning, controller.session.planning)
-        // Editing the next goal at home must retain the explicitly selected range.
-        controller.session.text = "学习摄影"
-        controller.openPlanning()
-        XCTAssertEqual(controller.session.planning?.goal, "学习摄影")
-        XCTAssertEqual(controller.session.planning?.start, start)
-        XCTAssertEqual(controller.session.planning?.end, end)
+        XCTAssertEqual(try controller.environment.store?.all().first { $0.id == original.id }?.planning, original.planning)
     }
 
     @MainActor func testPlanningWithNoReferenceCalendarsSendsFullAvailability() async throws {
@@ -866,6 +923,28 @@ final class NativeServiceTests: XCTestCase {
         XCTAssertTrue(try store.all().isEmpty)
     }
 
+    @MainActor func testBatchDeletingHistoryKeepsOtherRecordsAndDoesNotResaveDeletedInput() async throws {
+        let store = try SessionStore(inMemory: true)
+        var first = ImportSession(); first.text = "阅读"
+        var second = ImportSession(); second.text = "旅行"
+        var kept = ImportSession(); kept.text = "保留"; kept.drafts = [reviewEvent("已有日程")]
+        kept.drafts[0].eventIdentifier = "saved-event"
+        for session in [first, second, kept] { try store.save(session) }
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true), store: store)
+        let controller = ImportController(environment: environment, session: second)
+        controller.schedulePersistence()
+        let ids: Set<UUID> = [first.id, second.id, UUID()]
+        try store.delete(ids)
+        controller.discardDeletedSession(ids)
+        try await Task.sleep(for: .milliseconds(600))
+        try controller.persist()
+        XCTAssertEqual(try store.all(), [kept])
+        XCTAssertTrue(controller.session.text.isEmpty)
+        XCTAssertNotEqual(controller.session.id, second.id)
+        try store.delete(Set<UUID>())
+        XCTAssertEqual(try store.all(), [kept])
+    }
+
     @MainActor func testEventKitCreateUpdateMoveAndRemove() async throws {
         let service = CalendarService()
         try await service.requestAccess()
@@ -943,6 +1022,7 @@ private final class PlanningNativeTransport: URLProtocol {
     private static var content = question
     static var requests: [String] { lock.lock(); defer { lock.unlock() }; return bodies }
     static func reset(response: String? = nil) { lock.lock(); bodies = []; content = response ?? question; lock.unlock() }
+    static func setResponse(_ response: String) { lock.lock(); content = response; lock.unlock() }
     override class func canInit(with request: URLRequest) -> Bool { true }
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
     override func startLoading() {

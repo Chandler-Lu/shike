@@ -19,7 +19,16 @@ import ShikeCore
             }
         }
         #endif
-        _environment = StateObject(wrappedValue: AppEnvironment())
+        let environment = AppEnvironment()
+        #if DEBUG
+        if AppIdentity.isUITesting && ProcessInfo.processInfo.arguments.contains("-history-fixture") {
+            for title in ["保留记录", "阅读记录", "旅行记录"] {
+                var record = ImportSession(); record.text = title
+                try? environment.store?.save(record)
+            }
+        }
+        #endif
+        _environment = StateObject(wrappedValue: environment)
         #if DEBUG
         if CloudKitReadOnlyProbe.isRequested { Task { await CloudKitReadOnlyProbe.run() } }
         if LLMReadOnlyProbe.isRequested { Task { await LLMReadOnlyProbe.run() } }

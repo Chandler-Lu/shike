@@ -4,6 +4,43 @@ import ShikeCore
 @testable import Shike
 
 final class CalendarInteractionTests: XCTestCase {
+    func testPagingDistinguishesShortDragFlickAndFullSwipe() {
+        XCTAssertEqual(CalendarPaging.direction(distance: 12, velocity: 700, width: 390), 0)
+        XCTAssertEqual(CalendarPaging.direction(distance: -30, velocity: -100, width: 390), 0)
+        XCTAssertEqual(CalendarPaging.direction(distance: -30, velocity: -600, width: 390), 1)
+        XCTAssertEqual(CalendarPaging.direction(distance: 180, velocity: 0, width: 390), -1)
+    }
+    func testCachedWindowRejectsChangedFiltersAndDatesOutsideCoverage() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let cache = CalendarWindowCache(range: DateInterval(start: start, duration: 7 * 86400), key: "work|Shanghai|revision1")
+        let nextDay = DateInterval(start: start.addingTimeInterval(86400), duration: 86400)
+        XCTAssertTrue(cache.covers(nextDay, key: cache.key))
+        XCTAssertFalse(cache.covers(nextDay, key: "personal|Shanghai|revision1"))
+        XCTAssertFalse(cache.covers(nextDay, key: "work|Shanghai|revision2"))
+        XCTAssertFalse(cache.covers(DateInterval(start: start.addingTimeInterval(7 * 86400), duration: 86400), key: cache.key))
+    }
+    func testPreparedDaysInvalidateMovedEventsAndKeepCivilCountdownDates() throws {
+        let zone = try XCTUnwrap(TimeZone(identifier: "Asia/Shanghai"))
+        var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone
+        let day = calendar.date(from: DateComponents(year: 2026, month: 10, day: 17))!
+        let tomorrow = calendar.date(byAdding: .day, value: 1, to: day)!
+        var event = CalendarEventSnapshot(eventID: "meeting", itemID: "meeting", calendarID: "work", title: "会议", start: day.addingTimeInterval(36000), end: day.addingTimeInterval(39600))
+        var countdown = Countdown(title: "纪念日", date: CivilDate(year: 2026, month: 10, day: 17))
+        countdown.timeZoneIdentifier = "Pacific/Honolulu"
+        let cache = CalendarDayCache()
+        cache.update(events: [event], countdowns: [countdown], timeZone: zone)
+        XCTAssertEqual(cache.content(for: day).placements.map(\.event.id), [event.id])
+        XCTAssertEqual(cache.content(for: day).countdowns.map(\.id), [countdown.id])
+        XCTAssertTrue(cache.content(for: tomorrow).events.isEmpty)
+        event.start = tomorrow.addingTimeInterval(36000); event.end = event.start.addingTimeInterval(3600)
+        cache.update(events: [event], countdowns: [], timeZone: zone)
+        XCTAssertTrue(cache.content(for: day).events.isEmpty)
+        XCTAssertTrue(cache.content(for: day).countdowns.isEmpty)
+        XCTAssertEqual(cache.content(for: tomorrow).placements.map(\.start), [event.start])
+        cache.update(events: [], countdowns: [], timeZone: zone)
+        XCTAssertTrue(cache.content(for: tomorrow).events.isEmpty)
+    }
+
     @MainActor func testNativeAllDayWithInclusiveEndRemainsVisible() async throws {
         let service = CalendarService(useDemo: false); try await service.requestAccess()
         let source = try XCTUnwrap(service.store.sources.first(where: { $0.sourceType == .local }) ?? service.store.defaultCalendarForNewEvents?.source)

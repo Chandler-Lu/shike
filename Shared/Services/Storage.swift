@@ -96,11 +96,14 @@ enum AppIdentity {
     }
 
     func delete(_ id: UUID) throws {
+        try delete([id])
+    }
+    func delete(_ ids: Set<UUID>) throws {
+        guard !ids.isEmpty else { return }
         let context = ModelContext(container)
-        let descriptor = FetchDescriptor<StoredSession>(predicate: #Predicate { $0.id == id })
-        for record in try context.fetch(descriptor) { context.delete(record) }
+        for record in try context.fetch(FetchDescriptor<StoredSession>()) where ids.contains(record.id) { context.delete(record) }
         try context.save()
-        NotificationCenter.default.post(name: .shikeSessionChanged, object: nil)
+        NotificationCenter.default.post(name: .shikeSessionChanged, object: nil, userInfo: ["deletedIDs": ids])
     }
     func importMissing(_ sessions: [ImportSession]) throws -> Int {
         let context = ModelContext(container)

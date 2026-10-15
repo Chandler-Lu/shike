@@ -1,6 +1,73 @@
 import XCTest
 
 final class CalendarInteractionUITests: XCTestCase {
+    func testHorizontalSwipesPageDatesWithoutChangingVerticalScrollBehavior() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let sidebar = app.buttons["section-3"]
+        if sidebar.isHittable { activate(sidebar) } else { activate(app.tabBars.buttons["日历"]) }
+        let timeline = app.scrollViews["calendarTimeline"]
+        XCTAssertTrue(timeline.waitForExistence(timeout: 8))
+        let format = DateFormatter(); format.locale = Locale(identifier: "en_US_POSIX")
+        format.calendar = Calendar(identifier: .gregorian); format.timeZone = TimeZone(secondsFromGMT: 0); format.dateFormat = "yyyy-MM-dd"
+        for (label, days) in [("当天", 1), ("3 天", 3), ("7 天", 7)] {
+            activate(app.segmentedControls["calendarRange"].buttons[label])
+            let original = try XCTUnwrap(timeline.value as? String)
+            let originalEventY = app.buttons["calendarEvent-demo-0"].frame.minY
+            let next = format.string(from: try XCTUnwrap(format.date(from: original)).addingTimeInterval(Double(days) * 86400))
+            timeline.swipeLeft()
+            let paged = NSPredicate { _, _ in timeline.value as? String == next }
+            expectation(for: paged, evaluatedWith: timeline); waitForExpectations(timeout: 5)
+            timeline.swipeRight()
+            let returned = NSPredicate { _, _ in timeline.value as? String == original }
+            expectation(for: returned, evaluatedWith: timeline); waitForExpectations(timeout: 5)
+            let event = app.buttons["calendarEvent-demo-0"]
+            let beforeY = event.frame.minY
+            XCTAssertEqual(beforeY, originalEventY, accuracy: 2, "翻页返回后保留纵向滚动位置")
+            // Tall iPads can already be at the bottom after the initial 08:00 scroll.
+            timeline.swipeDown()
+            XCTAssertEqual(timeline.value as? String, original, "上下滚动不能切换日期")
+            XCTAssertGreaterThan(event.frame.minY, beforeY + 30, "左右翻页手势不能拦截时间轴的上下滚动")
+            timeline.swipeUp()
+            XCTAssertEqual(timeline.value as? String, original)
+            XCTAssertFalse(app.buttons["finishEditing"].exists, "短滑不能触发新增日程")
+        }
+        activate(app.buttons["calendarToday"])
+        activate(app.segmentedControls["calendarRange"].buttons["当天"])
+        let event = app.buttons["calendarEvent-demo-0"]
+        for _ in 0..<12 where !event.isHittable {
+            let above = event.frame.midY < timeline.frame.midY
+            let origin = timeline.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: above ? 0.45 : 0.75))
+            origin.press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: 0, dy: above ? 170 : -170)))
+        }
+        XCTAssertTrue(event.isHittable)
+        activate(event)
+        XCTAssertTrue(app.navigationBars["日程详情"].waitForExistence(timeout: 5), "翻页后仍可点开日程")
+    }
+
+    func testLongHoldAcrossColumnsMovesEventWithoutPaging() throws {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let sidebar = app.buttons["section-3"]
+        if sidebar.isHittable { activate(sidebar) } else { activate(app.tabBars.buttons["日历"]) }
+        activate(app.segmentedControls["calendarRange"].buttons["3 天"])
+        let timeline = app.scrollViews["calendarTimeline"]
+        let event = app.buttons["calendarEvent-demo-0"]
+        XCTAssertTrue(event.waitForExistence(timeout: 8))
+        let date = timeline.value as? String, beforeX = event.frame.minX
+        let columnWidth = (timeline.frame.width - 42) / 3
+        let source = event.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5))
+        hold(source, to: source.withOffset(CGVector(dx: columnWidth, dy: 0)))
+        let moved = NSPredicate { _, _ in event.exists && event.frame.minX > beforeX + columnWidth * 0.8 }
+        expectation(for: moved, evaluatedWith: event); waitForExpectations(timeout: 5)
+        XCTAssertEqual(timeline.value as? String, date, "长按拖动已有日程时不能翻页")
+        XCTAssertTrue(event.label.contains("10:00"), "横向拖动保留当地时刻")
+    }
+
     func testNativeCreateAllDayThenDeleteInSystemEditorReturnsToCalendar() {
         nativeCreateAndDelete(allDay: true)
     }

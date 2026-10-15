@@ -44,8 +44,8 @@ struct DataExportView: View {
     var body: some View {
         PaperCard {
             VStack(alignment: .leading, spacing: 14) {
-                Label("数据与备份", systemImage: "externaldrive.badge.icloud").font(Notebook.handwriting(23))
-                Text("将倒数日、分类、原文、日程草稿、保存记录、问答和设置导出为标准 JSON。包含接口地址与提示词，不包含 API Key、授权记录或原图。")
+                Label("数据备份", systemImage: "externaldrive.badge.icloud").font(Notebook.handwriting(23))
+                Text("将个人设置、接口地址、提示词导出为为标准 JSON，不包含 API Key。")
                     .font(.caption).foregroundStyle(Notebook.secondaryInk)
                 Button("导出 JSON 文件") {
                     do {
@@ -68,7 +68,7 @@ struct DataExportView: View {
                             .padding(.trailing, 4).accessibilityIdentifier("automaticDataBackup")
                         Toggle("同时备份到 iCloud Drive", isOn: $backups.cloudEnabled)
                             .padding(.trailing, 4).accessibilityIdentifier("backupToCloud")
-                        Text("数据变化后、打开或离开 App 时检查备份。每台设备保留最近 20 份本地与云端副本；文件保存在 iCloud Drive → 拾刻计划 → Backups。")
+                        Text("数据变化后、打开或离开 App 时检查备份。")
                             .font(.caption).foregroundStyle(Notebook.secondaryInk)
                         Text(backups.status).font(.caption).foregroundStyle(Notebook.secondaryInk)
                         if backups.cloudEnabled {

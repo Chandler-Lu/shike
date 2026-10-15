@@ -2,6 +2,10 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>$(PRODUCT_BUNDLE_IDENTIFIER).model.*</string>
+	</array>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -15,7 +19,6 @@
 	</array>
 	<key>NSUbiquitousContainers</key>
 	<dict>
-		<!-- Xcode expands values, not dictionary keys. Keep this literal in sync with ShikeCloudContainer. -->
 		<key>iCloud.com.chandler.shike</key>
 		<dict>
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
@@ -61,10 +64,6 @@
 			<key>UIApplicationShortcutItemType</key>
 			<string>com.chandler.shike.import.latest-photo</string>
 		</dict>
-	</array>
-	<key>BGTaskSchedulerPermittedIdentifiers</key>
-	<array>
-		<string>$(PRODUCT_BUNDLE_IDENTIFIER).model.*</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>

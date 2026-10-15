@@ -147,66 +147,69 @@ struct CalendarSummaryView: View {
         NavigationStack {
             ZStack {
                 PaperBackground()
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 22) {
-                        header
-                        if let context = controller.context, context.exchanges.count > 1 {
-                            DisclosureGroup("此前的总结与追问（\(context.exchanges.count - 1)）") {
-                                VStack(alignment: .leading, spacing: 20) {
-                                    ForEach(Array(context.exchanges.dropLast().enumerated()), id: \.offset) { _, exchange in
-                                        VStack(alignment: .leading, spacing: 10) {
-                                            Text(exchange.question ?? "最初的总结").font(.subheadline.weight(.semibold))
-                                            Text(exchange.answer.text(title: "", markdown: false).trimmingCharacters(in: .whitespacesAndNewlines))
-                                                .font(.subheadline).textSelection(.enabled)
-                                        }.frame(maxWidth: .infinity, alignment: .leading)
-                                    }
-                                }.padding(.top, 12)
-                            }.font(.subheadline).accessibilityIdentifier("summaryHistory")
-                        }
-                        if let summary = controller.summary {
-                            if let asked = controller.context?.exchanges.last?.question {
-                                Label(asked, systemImage: "bubble.left").font(.subheadline.weight(.medium))
-                                    .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("summaryQuestion")
+                // Keep the composer in the keyboard-resized layout instead of layering
+                // a bottom inset with a floating keyboard toolbar over the sheet.
+                VStack(spacing: 0) {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 22) {
+                            header
+                            if let context = controller.context, context.exchanges.count > 1 {
+                                DisclosureGroup("此前的总结与追问（\(context.exchanges.count - 1)）") {
+                                    VStack(alignment: .leading, spacing: 20) {
+                                        ForEach(Array(context.exchanges.dropLast().enumerated()), id: \.offset) { _, exchange in
+                                            VStack(alignment: .leading, spacing: 10) {
+                                                Text(exchange.question ?? "最初的总结").font(.subheadline.weight(.semibold))
+                                                Text(exchange.answer.text(title: "", markdown: false).trimmingCharacters(in: .whitespacesAndNewlines))
+                                                    .font(.subheadline).textSelection(.enabled)
+                                            }.frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                    }.padding(.top, 12)
+                                }.font(.subheadline).accessibilityIdentifier("summaryHistory")
                             }
-                            PaperCard(tint: Notebook.yellow.opacity(0.13)) {
-                                Text(summary.overview).lineSpacing(5).textSelection(.enabled)
-                                    .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("calendarSummaryOverview")
+                            if let summary = controller.summary {
+                                if let asked = controller.context?.exchanges.last?.question {
+                                    Label(asked, systemImage: "bubble.left").font(.subheadline.weight(.medium))
+                                        .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("summaryQuestion")
+                                }
+                                PaperCard(tint: Notebook.yellow.opacity(0.13)) {
+                                    Text(summary.overview).lineSpacing(5).textSelection(.enabled)
+                                        .frame(maxWidth: .infinity, alignment: .leading).accessibilityIdentifier("calendarSummaryOverview")
+                                }
+                                section("日程安排", icon: "calendar", values: summary.agenda)
+                                section("需要留意", icon: "bell", values: summary.attention)
+                                section("安排建议", icon: "lightbulb", values: summary.suggestions)
+                                ViewThatFits {
+                                    HStack(spacing: 12) { copyButtons(summary) }
+                                    VStack(spacing: 10) { copyButtons(summary) }
+                                }
+                                if let copied { Text(copied).font(.caption).foregroundStyle(Notebook.accent) }
                             }
-                            section("日程安排", icon: "calendar", values: summary.agenda)
-                            section("需要留意", icon: "bell", values: summary.attention)
-                            section("安排建议", icon: "lightbulb", values: summary.suggestions)
-                            ViewThatFits {
-                                HStack(spacing: 12) { copyButtons(summary) }
-                                VStack(spacing: 10) { copyButtons(summary) }
+                            if let pending = controller.pendingQuestion {
+                                Label(pending, systemImage: "bubble.left").font(.subheadline).accessibilityIdentifier("pendingSummaryQuestion")
                             }
-                            if let copied { Text(copied).font(.caption).foregroundStyle(Notebook.accent) }
+                            if controller.running { progressCard }
+                            if let error = controller.error {
+                                NoteMessage(text: error, isError: true)
+                                Button(controller.pendingQuestion == nil ? "重新总结" : "重试追问") { copied = nil; controller.retry(preferences: preferences) }
+                                    .buttonStyle(InkButtonStyle(prominent: false))
+                            }
+                            if controller.summary != nil {
+                                Text("基于本次日程快照，建议不会修改日历。")
+                                    .font(.caption).foregroundStyle(Notebook.secondaryInk)
+                            }
                         }
-                        if let pending = controller.pendingQuestion {
-                            Label(pending, systemImage: "bubble.left").font(.subheadline).accessibilityIdentifier("pendingSummaryQuestion")
-                        }
-                        if controller.running { progressCard }
-                        if let error = controller.error {
-                            NoteMessage(text: error, isError: true)
-                            Button(controller.pendingQuestion == nil ? "重新总结" : "重试追问") { copied = nil; controller.retry(preferences: preferences) }
-                                .buttonStyle(InkButtonStyle(prominent: false))
-                        }
-                        if controller.summary != nil {
-                            Text("基于本次日程快照，建议不会修改日历。")
-                                .font(.caption).foregroundStyle(Notebook.secondaryInk)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(22).frame(maxWidth: 720).frame(maxWidth: .infinity)
-                }.scrollDismissesKeyboard(.interactively)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(22).frame(maxWidth: 720).frame(maxWidth: .infinity)
+                    }.scrollDismissesKeyboard(.interactively).accessibilityIdentifier("calendarSummaryScroll")
+                    if controller.summary != nil { composer }
+                }
             }
-            .safeAreaInset(edge: .bottom, spacing: 0) { if controller.summary != nil { composer } }
             .foregroundStyle(Notebook.ink)
             .navigationTitle("日历总结").navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(controller.running ? "收起" : "完成") { dismiss() }.accessibilityIdentifier("closeCalendarSummary")
                 }
-                ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { questionFocused = false } }
             }
         }.tint(Notebook.accent)
             .presentationDetents([.medium, .large], selection: $detent).presentationDragIndicator(.visible)
@@ -251,11 +254,18 @@ struct CalendarSummaryView: View {
         }.accessibilityIdentifier("summaryProgress")
     }
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 12) {
+        HStack(alignment: .bottom, spacing: 8) {
             TextField("继续问问这些安排…", text: $question, axis: .vertical)
                 .lineLimit(1...4).focused($questionFocused).padding(12)
                 .background(Notebook.ink.opacity(0.04), in: RoundedRectangle(cornerRadius: 12))
                 .accessibilityIdentifier("summaryFollowUpInput")
+            if questionFocused && !PlatformSupport.isMac {
+                Button { questionFocused = false } label: {
+                    Image(systemName: "keyboard.chevron.compact.down").font(.title3)
+                        .frame(width: 44, height: 44)
+                }.buttonStyle(.plain).foregroundStyle(Notebook.secondaryInk)
+                    .accessibilityLabel("收起键盘").accessibilityIdentifier("hideSummaryKeyboard")
+            }
             Button {
                 controller.followUp(question, preferences: preferences)
                 if controller.running { question = ""; questionFocused = false; copied = nil }

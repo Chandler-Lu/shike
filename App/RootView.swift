@@ -77,6 +77,9 @@ struct RootView: View {
                 countdownNavigation.open(url); workspace.selection = 4
             }
             .onChange(of: quickImport.pending?.id) { _, id in if id != nil { workspace.selection = 0 } }
+            .onReceive(NotificationCenter.default.publisher(for: .shikeSessionChanged)) { notification in
+                if let ids = notification.userInfo?["deletedIDs"] as? Set<UUID> { controller.discardDeletedSession(ids) }
+            }
             .onChange(of: shortcutInbox.pending?.id) { _, id in if id != nil { workspace.selection = 0 } }
             .onAppear { shortcutInbox.refresh(); if shortcutInbox.pending != nil { workspace.selection = 0 } }
             .onAppear { if quickImport.pending != nil { workspace.selection = 0 }; countdownCoordinator.refresh(); environment.backups.start() }

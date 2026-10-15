@@ -62,6 +62,62 @@ final class PlanningTests: XCTestCase {
         let utc = try PlanningReply.decode(#"{"kind":"proposal","message":"上海 08:00","events":[{"title":"出发","start":"2026-10-17T00:00:00Z","end":"2026-10-17T01:00:00Z","timeZone":"Asia/Shanghai"}]}"#, timeZone: TimeZone(identifier: "Asia/Shanghai")!)
         XCTAssertEqual(utc.drafts.first?.start, date("2026-10-17T08:00:00+08:00"))
     }
+    func testOnlyAnsweredQuestionsAreMatchedIgnoringPunctuationAndSpacing() {
+        var plan = PlanningConversation(goal: "测试")
+        plan.turns = [PlanningTurn(role: "assistant", text: "每次希望安排多久？")]
+        XCTAssertFalse(plan.hasAnsweredQuestion("每次 希望安排多久?"))
+        plan.turns.append(PlanningTurn(role: "user", text: "半小时"))
+        XCTAssertTrue(plan.hasAnsweredQuestion("每次 希望安排多久?"))
+        XCTAssertFalse(plan.hasAnsweredQuestion("每天几点方便？"))
+        XCTAssertFalse(plan.hasAnsweredQuestion("半小时是包含通勤的时间吗？"))
+    }
+
+    func testRepeatedAnsweredQuestionGetsOneCorrectionAcrossProviders() async throws {
+        defer { MockURLProtocol.handler = nil }
+        let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [MockURLProtocol.self]
+        let session = URLSession(configuration: config); defer { session.invalidateAndCancel() }
+        let client = LLMClient(session: session)
+        var plan = PlanningConversation(goal: "测试", timeZone: zone)
+        plan.turns = [PlanningTurn(role: "assistant", text: "每次希望安排多久？"), PlanningTurn(role: "user", text: "半小时")]
+        for format in APIFormat.allCases {
+            for keepsRepeating in [false, true] {
+                var count = 0
+                MockURLProtocol.handler = { request in
+                    var data = request.httpBody ?? Data()
+                    if let stream = request.httpBodyStream {
+                        stream.open(); defer { stream.close() }
+                        var buffer = [UInt8](repeating: 0, count: 4096)
+                        while stream.hasBytesAvailable { let n = stream.read(&buffer, maxLength: buffer.count); if n <= 0 { break }; data.append(buffer, count: n) }
+                    }
+                    count += 1
+                    let raw = String(decoding: data, as: UTF8.self)
+                    XCTAssertTrue(raw.contains("先确认目标中的具体活动"))
+                    XCTAssertTrue(raw.contains("半小时"))
+                    if count == 2 { XCTAssertTrue(raw.contains("rejectedQuestion")) }
+                    let message = count == 1 || keepsRepeating ? "每次 希望安排多久?" : "具体要安排什么测试？"
+                    let content = String(decoding: try JSONSerialization.data(withJSONObject: ["kind": "question", "message": message, "options": []]), as: UTF8.self)
+                    let envelope: [String: Any]
+                    switch format {
+                    case .openAI: envelope = ["choices": [["message": ["content": content], "finish_reason": "stop"]]]
+                    case .claude: envelope = ["content": [["type": "text", "text": content]], "stop_reason": "end_turn"]
+                    case .gemini: envelope = ["candidates": [["content": ["parts": [["text": content]]], "finishReason": "STOP"]]]
+                    }
+                    return (200, try JSONSerialization.data(withJSONObject: envelope))
+                }
+                do {
+                    let reply = try await client.plan(conversation: plan, drafts: [], timeZone: zone, referenceDate: .now,
+                        available: nil, configuration: APIConfiguration(baseURL: "https://test.example", model: "fixture", format: format), apiKey: "fixture")
+                    XCTAssertFalse(keepsRepeating)
+                    XCTAssertEqual(reply.message, "具体要安排什么测试？")
+                } catch {
+                    XCTAssertTrue(keepsRepeating, "Unexpected error: \(error)")
+                    XCTAssertTrue(error.localizedDescription.contains("重复询问"))
+                }
+                XCTAssertEqual(count, 2, "只允许纠正一次，不能无限请求或把重复问题交给用户")
+            }
+        }
+    }
+
     func testAvailabilityMergesClipsAndKeepsAdjacentBoundariesFree() {
         let base = Date(timeIntervalSince1970: 0)
         func range(_ a: Double, _ b: Double) -> DateInterval { DateInterval(start: base.addingTimeInterval(a), end: base.addingTimeInterval(b)) }

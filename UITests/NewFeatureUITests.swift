@@ -151,17 +151,51 @@ final class NewFeatureUITests: XCTestCase {
         capture("planning-single-keyboard-toolbar", app: app)
         activate(app.buttons["收起键盘"])
         activate(app.buttons["restartPlanning"])
-        let goal = app.textFields["planningGoal"].exists ? app.textFields["planningGoal"] : app.textViews["planningGoal"]
-        XCTAssertTrue(goal.waitForExistence(timeout: 5))
+        XCTAssertTrue(option.waitForExistence(timeout: 8), "重新安排后应自动从第一个问题开始")
         XCTAssertFalse(app.buttons["planning-editEvent-读书与笔记"].exists)
-        XCTAssertFalse(app.buttons["planningOption-每次 30 分钟，晚上安排"].exists)
-        XCTAssertFalse(start.isEnabled)
-        activate(goal); goal.typeText("学习摄影")
-        activate(app.buttons["收起键盘"])
+        XCTAssertFalse(app.staticTexts["前面的问答"].exists)
+        XCTAssertFalse(app.textFields["planningGoal"].exists)
+        XCTAssertFalse(app.textViews["planningGoal"].exists)
+        XCTAssertFalse((answer.value as? String ?? "").contains("稍晚一点"))
+        XCTAssertTrue(app.staticTexts["这周想读完一本书，帮我找个安静的时间。"].exists)
         activate(range); reveal(none, app: app)
         for item in switches.allElementsBoundByIndex { XCTAssertEqual(item.value as? String, "0") }
-        activate(range); reveal(start, app: app); activate(start)
-        XCTAssertTrue(option.waitForExistence(timeout: 8))
+        capture("planning-restarted-with-original-goal", app: app)
+    }
+
+    func testSummaryComposerStaysAboveKeyboardWhileTypingAndScrolling() throws {
+        #if targetEnvironment(macCatalyst)
+        throw XCTSkip("Mac 使用硬件键盘，不验证屏幕键盘避让")
+        #else
+        let app = launch(); section(3, name: "日历", app: app)
+        activate(app.buttons["summarizeCalendar"])
+        XCTAssertTrue(app.staticTexts["calendarSummaryOverview"].waitForExistence(timeout: 5))
+        let input = app.textFields["summaryFollowUpInput"].exists ? app.textFields["summaryFollowUpInput"] : app.textViews["summaryFollowUpInput"]
+        let send = app.buttons["sendSummaryFollowUp"]
+        let keyboard = app.keyboards.firstMatch
+        for index in 1...2 {
+            activate(input)
+            input.typeText(index == 1 ? "如果明天" : "还有其他安排，应该如何预留休息时间？\n请分上午和下午说明。")
+            XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+            capture("summary-keyboard-\(index)", app: app)
+            XCTAssertLessThanOrEqual(input.frame.maxY, keyboard.frame.minY - 4, "输入框必须完整位于键盘上方")
+            XCTAssertLessThanOrEqual(send.frame.maxY, keyboard.frame.minY - 4, "发送按钮不能被键盘遮挡")
+            XCTAssertTrue(send.isHittable)
+            let hide = app.buttons["收起键盘"]
+            XCTAssertEqual(app.buttons.matching(identifier: "收起键盘").count, 1)
+            XCTAssertLessThanOrEqual(hide.frame.maxY, keyboard.frame.minY - 4)
+            XCTAssertFalse(hide.frame.intersects(send.frame), "收起键盘不能盖住发送按钮")
+            activate(hide)
+            XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+            if index == 1 { app.scrollViews["calendarSummaryScroll"].swipeUp() }
+        }
+        XCTAssertTrue((input.value as? String)?.contains("请分上午和下午说明") == true)
+        activate(input)
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        activate(send)
+        XCTAssertTrue(app.staticTexts["summaryQuestion"].waitForExistence(timeout: 5))
+        XCTAssertTrue(keyboard.waitForNonExistence(timeout: 5))
+        #endif
     }
 
     func testSummaryBannerHidesAndOpensResultAcrossTabsWithFollowUp() {
@@ -186,7 +220,9 @@ final class NewFeatureUITests: XCTestCase {
         let question = app.textFields["summaryFollowUpInput"].exists ? app.textFields["summaryFollowUpInput"] : app.textViews["summaryFollowUpInput"]
         XCTAssertTrue(question.waitForExistence(timeout: 5))
         activate(question); question.typeText("留多久休息？")
+        #if !targetEnvironment(macCatalyst)
         XCTAssertEqual(app.buttons.matching(identifier: "收起键盘").count, 1)
+        #endif
         activate(app.buttons["sendSummaryFollowUp"])
         XCTAssertTrue(app.staticTexts["pendingSummaryQuestion"].waitForExistence(timeout: 5))
         activate(close)
@@ -363,6 +399,55 @@ final class NewFeatureUITests: XCTestCase {
         XCTAssertTrue(count.waitForExistence(timeout: 5))
         XCTAssertEqual(count.label, "还有 12 天")
     }
+    func testHistoryPullSearchAndHoldToDeleteMultipleRecords() {
+        #if !targetEnvironment(macCatalyst)
+        XCUIDevice.shared.orientation = .portrait
+        #endif
+        let app = launch(extra: ["-history-fixture"])
+        section(1, name: "记录", app: app)
+        func card(_ title: String) -> XCUIElement {
+            app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "history-", title)).firstMatch
+        }
+        let first = card("阅读记录"), second = card("旅行记录"), kept = card("保留记录")
+        XCTAssertTrue(first.waitForExistence(timeout: 5)); XCTAssertTrue(second.exists); XCTAssertTrue(kept.exists)
+        let search = app.textFields["historySearch"]
+        XCTAssertFalse(search.exists)
+        #if targetEnvironment(macCatalyst)
+        activate(app.buttons["搜索记录"])
+        #else
+        let list = app.scrollViews["historyList"]
+        list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)).press(forDuration: 0.05,
+            thenDragTo: list.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.65)))
+        #endif
+        XCTAssertTrue(search.waitForExistence(timeout: 5)); activate(search); search.typeText("旅行")
+        XCTAssertTrue(second.exists); XCTAssertFalse(first.exists); XCTAssertFalse(kept.exists)
+        capture("history-pull-search", app: app)
+        activate(app.buttons["closeHistorySearch"])
+        XCTAssertTrue(search.waitForNonExistence(timeout: 5))
+        hold(first, app: app)
+        XCTAssertTrue(app.buttons["finishHistorySelection"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.navigationBars["这一页安排"].exists)
+        XCTAssertEqual(first.value as? String, "已选择")
+        activate(second)
+        XCTAssertEqual(app.staticTexts["historySelectionCount"].label, "已选择 2 条记录")
+        activate(app.buttons["selectAllHistory"]); activate(kept)
+        XCTAssertEqual(app.staticTexts["historySelectionCount"].label, "已选择 2 条记录")
+        activate(app.buttons["deleteSelectedHistory"]); activate(app.alerts.buttons["取消"])
+        XCTAssertTrue(first.exists); XCTAssertTrue(second.exists)
+        capture("history-multiple-selection", app: app)
+        activate(app.buttons["deleteSelectedHistory"]); activate(app.alerts.buttons["删除"].firstMatch)
+        XCTAssertTrue(first.waitForNonExistence(timeout: 5)); XCTAssertFalse(second.exists); XCTAssertTrue(kept.exists)
+        XCTAssertFalse(app.buttons["finishHistorySelection"].exists)
+        section(0, name: "导入", app: app); section(1, name: "记录", app: app)
+        XCTAssertFalse(first.exists); XCTAssertFalse(second.exists, "删除当前导入后，切换页面不能重新保存该记录")
+        hold(kept, app: app); activate(kept)
+        XCTAssertEqual(app.staticTexts["historySelectionCount"].label, "已选择 0 条记录")
+        XCTAssertFalse(app.buttons["deleteSelectedHistory"].isEnabled)
+        activate(app.buttons["finishHistorySelection"])
+        activate(kept)
+        XCTAssertTrue(app.staticTexts["原文"].waitForExistence(timeout: 5))
+    }
+
     func testCountdownHoldSelectsMultipleAndMovesThenDeletesOnlySelection() {
         let app = launch(); section(4, name: "倒数日", app: app)
         func card(_ title: String) -> XCUIElement {

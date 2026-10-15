@@ -16,6 +16,11 @@ struct CalendarScreen: View {
     @State private var events: [CalendarEventSnapshot] = []
     @State private var error: String?
     @State private var loading = false
+    @State private var queryCache: CalendarWindowCache?
+    @State private var dayCache = CalendarDayCache()
+    @State private var pageOffset: CGFloat = 0
+    @State private var settlingPage = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var filter = false
     @State private var selected: CalendarEventSnapshot?
     @State private var dayList: Date?
@@ -34,8 +39,10 @@ struct CalendarScreen: View {
     private var count: Int { [1, 3, 7].contains(preferences.calendarPreferences.visibleDays) ? preferences.calendarPreferences.visibleDays : 1 }
     private var days: [Date] { Scheduling.days(from: date, count: count, timeZone: zone) }
     private var hasDSTTransition: Bool { days.contains { calendar.date(byAdding: .day, value: 1, to: $0)!.timeIntervalSince($0) != 86400 } }
-    private var queryKey: String { "\(days[0])|\(count)|\(zone.identifier)|\(calendars.revision)|\(preferences.calendarPreferences)" }
+    private var dataKey: String { "\(zone.identifier)|\(calendars.revision)|\(calendars.authorized)|\(calendars.calendarIDs(for: preferences.calendarPreferences.visibleCalendars).sorted())" }
+    private var queryKey: String { "\(days[0])|\(count)|\(dataKey)" }
     var body: some View {
+        let _ = dayCache.update(events: events, countdowns: preferences.calendarPreferences.showCountdowns ?? true ? countdowns.entries : [], timeZone: zone)
         ZStack {
             PaperBackground()
             VStack(spacing: 12) {
@@ -50,8 +57,9 @@ struct CalendarScreen: View {
                     Button("允许访问系统日历") { Task { do { try await calendars.requestAccess() } catch { self.error = error.localizedDescription } } }
                         .font(.subheadline).frame(minHeight: 44).accessibilityIdentifier("calendarGrantAccess")
                 }
-                if loading { ProgressView().accessibilityLabel("正在读取日历") }
-                timeline
+                timeline.overlay(alignment: .topTrailing) {
+                    if loading { ProgressView().padding(8).accessibilityLabel("正在读取日历").allowsHitTesting(false) }
+                }
             }.padding(.top, 4)
         }.foregroundStyle(Notebook.ink)
             .navigationTitle("日历").navigationBarTitleDisplayMode(.inline)
@@ -64,7 +72,7 @@ struct CalendarScreen: View {
             } }
             .task(id: queryKey) { await load() }
             .onAppear { screenVisible = true; presentFinishedSummary() }
-            .onDisappear { screenVisible = false; drag = nil; ignoreEventTapsUntil = .distantPast }
+            .onDisappear { screenVisible = false; drag = nil; pageOffset = 0; settlingPage = false; ignoreEventTapsUntil = .distantPast }
             .onChange(of: scenePhase) { _, phase in if phase == .active { calendars.refresh(); presentFinishedSummary() } }
             .onChange(of: summaryController.needsPresentation) { _, _ in presentFinishedSummary() }
             .onChange(of: summaryPresentationBlocked) { _, blocked in if !blocked { presentFinishedSummary() } }
@@ -162,15 +170,16 @@ struct CalendarScreen: View {
         GeometryReader { geometry in
             let minimum: CGFloat = dynamicTypeSize.isAccessibilitySize ? 150 : 0
             let width = max(geometry.size.width - 42, CGFloat(count) * minimum)
-            let allDayRows = days.map { dayEvents($0).filter(\.allDay).count + dayCountdowns($0).count }.max() ?? 0
-            let allDayContentHeight = max(allDayRowHeight, CGFloat(allDayRows) * (allDayRowHeight + 4) - 4)
+            let paging = width + 42 <= geometry.size.width + 1
+            let allDayRows = days.map { dayCache.content(for: $0).allDay.count + dayCountdowns($0).count }.max() ?? 0
             let visibleRows = min(allDayExpanded ? 5 : 2, allDayRows)
             let allDayHeight = max(allDayRowHeight, CGFloat(visibleRows) * (allDayRowHeight + 4) - 4)
             ScrollView(.horizontal) {
                 VStack(spacing: 0) {
-                    HStack(spacing: 0) {
-                        Color.clear.frame(width: 42, height: 50)
-                        ForEach(days, id: \.self) { day in
+                    pageStrip(width: width + 42, paging: paging) { pageDays, _ in
+                        HStack(spacing: 0) {
+                            Color.clear.frame(width: 42, height: 50)
+                            ForEach(pageDays, id: \.self) { day in
                                 Button {
                                     date = day
                                     var settings = preferences.calendarPreferences; settings.visibleDays = 1; preferences.setCalendarPreferences(settings)
@@ -181,32 +190,33 @@ struct CalendarScreen: View {
                                     }.frame(width: width / CGFloat(count), height: 50)
                                         .foregroundStyle(calendar.isDate(day, inSameDayAs: .now) ? Notebook.accent : Notebook.ink)
                                 }.buttonStyle(.plain)
+                            }
                         }
                     }.fixedSize(horizontal: false, vertical: true)
-                    HStack(alignment: .top, spacing: 0) {
-                        if allDayRows > 2 {
-                            Button { allDayExpanded.toggle() } label: {
-                                VStack(spacing: 4) {
-                                    Text("全天").font(.caption2)
-                                    Image(systemName: allDayExpanded ? "chevron.up" : "chevron.down").font(.system(size: 10, weight: .semibold))
-                                }.frame(width: 42, height: max(44, allDayRowHeight))
-                                    .contentShape(Rectangle())
-                            }.buttonStyle(.plain).foregroundStyle(Notebook.accent)
-                                .accessibilityLabel(allDayExpanded ? "收起全天日程" : "展开全天日程")
-                                .accessibilityValue("最多 \(allDayRows) 项")
-                                .accessibilityIdentifier("expandAllDayEvents")
-                        } else {
-                            Text("全天").font(.caption2).foregroundStyle(Notebook.secondaryInk)
-                                .frame(width: 42, height: allDayRowHeight)
-                        }
-                        ScrollView(.vertical) {
-                            HStack(alignment: .top, spacing: 0) {
-                                ForEach(Array(days.enumerated()), id: \.element) { index, day in
-                                    allDayColumn(day, index: index, width: width / CGFloat(count), height: allDayContentHeight)
-                                }
+                    pageStrip(width: width + 42, paging: paging) { pageDays, page in
+                        HStack(alignment: .top, spacing: 0) {
+                            if allDayRows > 2 {
+                                Button { allDayExpanded.toggle() } label: {
+                                    VStack(spacing: 4) {
+                                        Text("全天").font(.caption2)
+                                        Image(systemName: allDayExpanded ? "chevron.up" : "chevron.down").font(.system(size: 10, weight: .semibold))
+                                    }.frame(width: 42, height: max(44, allDayRowHeight)).contentShape(Rectangle())
+                                }.buttonStyle(.plain).foregroundStyle(Notebook.accent)
+                                    .accessibilityLabel(allDayExpanded ? "收起全天日程" : "展开全天日程")
+                                    .accessibilityValue("最多 \(allDayRows) 项").accessibilityIdentifier("expandAllDayEvents")
+                            } else {
+                                Text("全天").font(.caption2).foregroundStyle(Notebook.secondaryInk).frame(width: 42, height: allDayRowHeight)
                             }
-                        }.frame(height: allDayHeight)
-                            .accessibilityIdentifier("calendarAllDayEvents")
+                            ScrollView(.vertical) {
+                                HStack(alignment: .top, spacing: 0) {
+                                    let rows = pageDays.map { dayCache.content(for: $0).allDay.count + dayCountdowns($0).count }.max() ?? 0
+                                    ForEach(Array(pageDays.enumerated()), id: \.element) { index, day in
+                                        allDayColumn(day, index: index, width: width / CGFloat(count),
+                                                     height: max(allDayRowHeight, CGFloat(rows) * (allDayRowHeight + 4) - 4), interactive: page == 0)
+                                    }
+                                }
+                            }.frame(height: allDayHeight).accessibilityIdentifier("calendarAllDayEvents")
+                        }
                     }.overlay(alignment: .bottom) {
                         if let drag, drag.allDay {
                             Text("\(drag.event?.title ?? "新日程") · \(drag.interval.start.formatted(.dateTime.month().day().inTimeZone(zone)))")
@@ -216,28 +226,64 @@ struct CalendarScreen: View {
                     Divider().overlay(Notebook.ink.opacity(0.15))
                     ScrollViewReader { scroll in
                         ScrollView(.vertical) {
-                            HStack(alignment: .top, spacing: 0) {
-                                VStack(spacing: 0) {
-                                    ForEach(0..<26, id: \.self) { hour in
-                                        Text(hour < 24 && !hasDSTTransition ? String(format: "%02d", hour) : "")
-                                            .font(.system(size: 10, design: .rounded)).foregroundStyle(Notebook.secondaryInk)
-                                            .frame(width: 42, height: hourHeight, alignment: .top).id(hour)
+                            pageStrip(width: width + 42, paging: paging) { pageDays, page in
+                                HStack(alignment: .top, spacing: 0) {
+                                    VStack(spacing: 0) {
+                                        ForEach(0..<26, id: \.self) { hour in
+                                            Text(hour < 24 && !hasDSTTransition ? String(format: "%02d", hour) : "")
+                                                .font(.system(size: 10, design: .rounded)).foregroundStyle(Notebook.secondaryInk)
+                                                .frame(width: 42, height: hourHeight, alignment: .top).id(hour + page * 26)
+                                        }
+                                    }
+                                    HStack(alignment: .top, spacing: 0) {
+                                        ForEach(pageDays, id: \.self) { day in dayColumn(day, width: width / CGFloat(count)) }
+                                    }.background {
+                                        if page == 0 {
+                                            CalendarHoldInteraction { state, point in
+                                                handleHold(state, at: point,
+                                                           geometry: CalendarTimelineGeometry(days: days, columnWidth: width / CGFloat(count), hourHeight: hourHeight, timeZone: zone), allDay: false)
+                                            }
+                                        }
                                     }
                                 }
-                                HStack(alignment: .top, spacing: 0) {
-                                    ForEach(days, id: \.self) { day in dayColumn(day, width: width / CGFloat(count)) }
-                                }.background(CalendarHoldInteraction { state, point in
-                                    handleHold(state, at: point,
-                                               geometry: CalendarTimelineGeometry(days: days, columnWidth: width / CGFloat(count), hourHeight: hourHeight, timeZone: zone), allDay: false)
-                                })
                             }.padding(.top, 6)
                         }.onAppear { scroll.scrollTo(8, anchor: .top) }
                     }
                 }.frame(width: width + 42)
             }.accessibilityIdentifier("calendarTimeline")
+                .accessibilityValue(CivilDate(days[0], timeZone: zone).description)
+                .background(CalendarPageInteraction(enabled: paging && !settlingPage, onChange: { distance in
+                    guard drag == nil, Date.now >= ignoreEventTapsUntil, !showsSummary else { return }
+                    pageOffset = max(-geometry.size.width, min(geometry.size.width, distance))
+                }, onEnd: { distance, velocity in
+                    guard drag == nil, Date.now >= ignoreEventTapsUntil, !showsSummary else { pageOffset = 0; return }
+                    finishPaging(distance: distance, velocity: velocity, width: width + 42)
+                }))
         }
     }
-    private func allDayColumn(_ day: Date, index: Int, width: CGFloat, height: CGFloat) -> some View {
+    private func pageStrip<Content: View>(width: CGFloat, paging: Bool, @ViewBuilder content: @escaping ([Date], Int) -> Content) -> some View {
+        HStack(alignment: .top, spacing: 0) {
+            ForEach(paging ? [-1, 0, 1] : [0], id: \.self) { page in
+                let pageDays = Scheduling.days(from: calendar.date(byAdding: .day, value: page * count, to: date)!, count: count, timeZone: zone)
+                content(pageDays, page).frame(width: width)
+                    .allowsHitTesting(page == 0).accessibilityHidden(page != 0)
+            }
+        }.offset(x: paging ? -width + pageOffset : 0).frame(width: width, alignment: .leading).clipped()
+    }
+    private func finishPaging(distance: CGFloat, velocity: CGFloat, width: CGFloat) {
+        let direction = CalendarPaging.direction(distance: distance, velocity: velocity, width: width)
+        guard direction != 0 else {
+            withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { pageOffset = 0 }; return
+        }
+        settlingPage = true
+        withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18), completionCriteria: .logicallyComplete) {
+            pageOffset = -CGFloat(direction) * width
+        } completion: {
+            var transaction = Transaction(); transaction.disablesAnimations = true
+            withTransaction(transaction) { move(direction * count); pageOffset = 0; settlingPage = false }
+        }
+    }
+    private func allDayColumn(_ day: Date, index: Int, width: CGFloat, height: CGFloat, interactive: Bool) -> some View {
         VStack(spacing: 4) {
             ForEach(dayEvents(day).filter(\.allDay)) { event in
                 Button { if Date.now >= ignoreEventTapsUntil { selected = event } } label: {
@@ -258,34 +304,36 @@ struct CalendarScreen: View {
                 }.buttonStyle(.plain).frame(height: allDayRowHeight).accessibilityIdentifier("calendarCountdown-\(entry.id)")
             }
         }.padding(.horizontal, 2).frame(width: width, height: height, alignment: .top)
-            .background(CalendarHoldInteraction { state, point in
-                handleHold(state, at: CGPoint(x: point.x + CGFloat(index) * width, y: point.y),
-                           geometry: CalendarTimelineGeometry(days: days, columnWidth: width, hourHeight: hourHeight, timeZone: zone), allDay: true)
-            })
+            .background {
+                if interactive {
+                    CalendarHoldInteraction { state, point in
+                        handleHold(state, at: CGPoint(x: point.x + CGFloat(index) * width, y: point.y),
+                                   geometry: CalendarTimelineGeometry(days: days, columnWidth: width, hourHeight: hourHeight, timeZone: zone), allDay: true)
+                    }
+                }
+            }
     }
-    private func dayCountdowns(_ day: Date) -> [Countdown] {
-        guard preferences.calendarPreferences.showCountdowns ?? true else { return [] }
-        // Civil all-day dates stay on their written day, even with a per-item time zone.
-        let civil = CivilDate(day, timeZone: zone)
-        return countdowns.entries.filter { entry in
-            let c = CountdownDates.calendar(entry)
-            guard let start = civil.date(in: c.timeZone), let end = c.date(byAdding: .day, value: 1, to: start) else { return false }
-            return !CountdownDates.occurrences(entry, in: DateInterval(start: start, end: end), limit: 1).isEmpty
-        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-    }
+    private func dayCountdowns(_ day: Date) -> [Countdown] { dayCache.content(for: day).countdowns }
     private func dayColumn(_ day: Date, width: CGFloat) -> some View {
         let end = calendar.date(byAdding: .day, value: 1, to: day)!
         let hours = end.timeIntervalSince(day) / 3600
-        let placements = TimelinePlacement.make(events: dayEvents(day).filter { !$0.allDay }, start: day, end: end)
+        let placements = dayCache.content(for: day).placements
         return ZStack(alignment: .topLeading) {
-            ForEach(0..<Int(hours), id: \.self) { hour in
-                Rectangle().fill(Notebook.ink.opacity(0.10)).frame(height: 0.5).offset(y: CGFloat(hour) * hourHeight)
-                if hasDSTTransition {
+            Canvas { context, size in
+                var lines = Path()
+                for hour in 0..<Int(hours) {
+                    let y = CGFloat(hour) * hourHeight
+                    lines.move(to: CGPoint(x: 0, y: y)); lines.addLine(to: CGPoint(x: size.width, y: y))
+                }
+                lines.move(to: .zero); lines.addLine(to: CGPoint(x: 0, y: size.height))
+                context.stroke(lines, with: .color(Notebook.ink.opacity(0.10)), lineWidth: 0.5)
+            }.allowsHitTesting(false).accessibilityHidden(true)
+            if hasDSTTransition || hours != 24 {
+                ForEach(0..<Int(hours), id: \.self) { hour in
                     Text(time(day.addingTimeInterval(Double(hour) * 3600))).font(.system(size: 9)).foregroundStyle(Notebook.secondaryInk)
                         .offset(x: 2, y: CGFloat(hour) * hourHeight + 2)
                 }
             }
-            Rectangle().fill(Notebook.ink.opacity(0.12)).frame(width: 0.5)
             if hours != 24 {
                 Text("夏令时切换").font(.system(size: 9)).foregroundStyle(Notebook.secondaryInk).padding(.top, 2)
             }
@@ -349,7 +397,7 @@ struct CalendarScreen: View {
         if summaryController.running { showsSummary = true; return }
         let range = DateInterval(start: days[0], end: calendar.date(byAdding: .day, value: count, to: days[0])!)
         let title = days[0].formatted(.dateTime.month().day().inTimeZone(zone)) + (count == 1 ? "的安排" : " – " + days.last!.formatted(.dateTime.month().day().inTimeZone(zone)) + "的安排")
-        summaryController.generate(CalendarSummaryRequest(title: title, input: CalendarSummaryInput(events: events, range: range, timeZone: zone)), preferences: preferences)
+        summaryController.generate(CalendarSummaryRequest(title: title, input: CalendarSummaryInput(events: events.filter { Scheduling.overlaps($0.interval(in: zone), range) }, range: range, timeZone: zone)), preferences: preferences)
         showsSummary = true
     }
     private var summaryPresentationBlocked: Bool {
@@ -361,10 +409,9 @@ struct CalendarScreen: View {
         showsSummary = true
     }
     private func timedEvent(at point: CGPoint, geometry: CalendarTimelineGeometry) -> CalendarEventSnapshot? {
-        let index = geometry.dayIndex(at: point), day = days[index]
-        let finish = calendar.date(byAdding: .day, value: 1, to: day)!
+        let index = geometry.dayIndex(at: point), day = geometry.days[index]
         let local = CGPoint(x: point.x - CGFloat(index) * geometry.columnWidth, y: point.y)
-        for item in TimelinePlacement.make(events: dayEvents(day).filter { !$0.allDay }, start: day, end: finish) {
+        for item in dayCache.content(for: day).placements {
             let lanes = count == 7 ? 1 : min(3, item.lanes)
             guard item.lane < lanes else { continue }
             let laneWidth = (geometry.columnWidth - 4) / CGFloat(lanes)
@@ -380,7 +427,7 @@ struct CalendarScreen: View {
             guard point.x >= 0, point.y >= 0 else { return }
             ignoreEventTapsUntil = .distantFuture
             guard calendars.authorized else { error = "请先允许访问系统日历。"; return }
-            let day = days[geometry.dayIndex(at: point)]
+            let day = geometry.days[geometry.dayIndex(at: point)]
             let row = Int(point.y / (allDayRowHeight + 4))
             let allDayEvents = dayEvents(day).filter(\.allDay)
             if allDay && row >= allDayEvents.count && row < allDayEvents.count + dayCountdowns(day).count { return }
@@ -398,29 +445,32 @@ struct CalendarScreen: View {
             guard var current = drag, current.allDay == allDay else { return }
             if let event = current.event { current.interval = geometry.moving(event, from: current.origin, to: point) }
             else if allDay {
-                let day = days[geometry.dayIndex(at: point)]
+                let day = geometry.days[geometry.dayIndex(at: point)]
                 current.interval = DateInterval(start: min(current.initial.start, day), end: calendar.date(byAdding: .day, value: 1, to: max(current.initial.start, day))!)
             } else if abs(point.y - current.origin.y) > 8 || geometry.dayIndex(at: point) != geometry.dayIndex(at: current.origin) {
                 let target = geometry.date(at: point)
                 current.interval = DateInterval(start: min(current.initial.start, target), end: max(current.initial.start.addingTimeInterval(900), target))
             }
-            drag = current
+            if current.interval != drag?.interval { drag = current }
             if state == .ended {
                 drag = nil
                 if let event = current.event {
                     guard current.interval.start != event.start || current.interval.end != event.end else { return }
-                    do { try calendars.reschedule(event, to: current.interval); PlatformSupport.lightFeedback() }
-                    catch { self.error = error.localizedDescription }
+                    do {
+                        try calendars.reschedule(event, to: current.interval)
+                        // Keep the drop position visible while the background query catches up.
+                        if let index = events.firstIndex(where: { $0.id == event.id }) {
+                            events[index].start = current.interval.start; events[index].end = current.interval.end
+                        }
+                        PlatformSupport.lightFeedback()
+                    } catch { self.error = error.localizedDescription }
                 } else { createEvent(at: current.interval.start, end: current.interval.end, allDay: allDay) }
             }
         case .cancelled, .failed: drag = nil; ignoreEventTapsUntil = .now.addingTimeInterval(0.35)
         default: break
         }
     }
-    private func dayEvents(_ day: Date) -> [CalendarEventSnapshot] {
-        let start = calendar.startOfDay(for: day), end = calendar.date(byAdding: .day, value: 1, to: calendar.startOfDay(for: day))!
-        return events.filter { Scheduling.overlaps($0.interval(in: zone), DateInterval(start: start, end: end)) }
-    }
+    private func dayEvents(_ day: Date) -> [CalendarEventSnapshot] { dayCache.content(for: day).events }
     private func color(_ event: CalendarEventSnapshot) -> Color { calendars.readableCalendars.first { $0.id == event.calendarID }?.color ?? Notebook.blue }
     private func time(_ value: Date) -> String { value.formatted(.dateTime.hour().minute().inTimeZone(zone)) }
     private func eventLabel(_ event: CalendarEventSnapshot) -> some View {
@@ -428,19 +478,71 @@ struct CalendarScreen: View {
     }
     private func move(_ days: Int) { date = calendar.date(byAdding: .day, value: days, to: date)! }
     private func load() async {
-        guard calendars.authorized else { events = []; return }
+        guard calendars.authorized else { events = []; queryCache = nil; loading = false; return }
+        let key = queryKey, scope = dataKey
+        let visible = DateInterval(start: days[0], end: calendar.date(byAdding: .day, value: count, to: days[0])!)
+        if let queryCache, queryCache.covers(visible, key: scope) { loading = false; return }
+        // Keep neighboring pages ready. The extra two days preserve floating all-day dates across zones.
+        let margin = max(7, count * 2)
+        let range = DateInterval(start: calendar.date(byAdding: .day, value: -margin, to: visible.start)!,
+                                 end: calendar.date(byAdding: .day, value: margin, to: visible.end)!)
         loading = true; error = nil
-        let key = queryKey
+        if queryCache?.key != scope { events = events.filter { calendars.calendarIDs(for: preferences.calendarPreferences.visibleCalendars).contains($0.calendarID) } }
         do {
-            let end = calendar.date(byAdding: .day, value: count, to: days[0])!
-            let loaded = try await calendars.events(in: DateInterval(start: days[0].addingTimeInterval(-172800), end: end.addingTimeInterval(172800)), calendarIDs: calendars.calendarIDs(for: preferences.calendarPreferences.visibleCalendars))
+            let loaded = try await calendars.events(in: DateInterval(start: range.start.addingTimeInterval(-172800), end: range.end.addingTimeInterval(172800)), calendarIDs: calendars.calendarIDs(for: preferences.calendarPreferences.visibleCalendars))
             try Task.checkCancellation()
             guard queryKey == key else { return }
-            events = loaded; loading = false
+            events = loaded; queryCache = CalendarWindowCache(range: range, key: scope); loading = false
         } catch is CancellationError { }
-        catch { if queryKey == key { events = []; self.error = error.localizedDescription; loading = false } }
+        catch { if queryKey == key { events = []; queryCache = nil; self.error = error.localizedDescription; loading = false } }
+    }
+
+}
+
+/// Query scope includes permissions, calendar filters, time zone and EventKit revision.
+struct CalendarWindowCache {
+    let range: DateInterval
+    let key: String
+    func covers(_ interval: DateInterval, key: String) -> Bool {
+        self.key == key && range.start <= interval.start && range.end >= interval.end
     }
 }
+
+/// Memoize civil dates, recurring countdowns and overlap lanes, independent of drag frames.
+final class CalendarDayCache {
+    struct Content {
+        let events: [CalendarEventSnapshot]
+        let allDay: [CalendarEventSnapshot]
+        let placements: [TimelinePlacement]
+        let countdowns: [Countdown]
+    }
+    private var events: [CalendarEventSnapshot] = []
+    private var countdowns: [Countdown] = []
+    private var zone = TimeZone.current
+    private var prepared: [Date: Content] = [:]
+    private var calendar: Calendar { var value = Calendar(identifier: .gregorian); value.timeZone = zone; return value }
+    func update(events: [CalendarEventSnapshot], countdowns: [Countdown], timeZone: TimeZone) {
+        guard self.events != events || self.countdowns != countdowns || zone != timeZone else { return }
+        self.events = events; self.countdowns = countdowns; zone = timeZone; prepared.removeAll(keepingCapacity: true)
+    }
+    func content(for day: Date) -> Content {
+        let start = calendar.startOfDay(for: day)
+        if let cached = prepared[start] { return cached }
+        let end = calendar.date(byAdding: .day, value: 1, to: start)!
+        let range = DateInterval(start: start, end: end), civil = CivilDate(start, timeZone: zone)
+        let visible = events.filter { Scheduling.overlaps($0.interval(in: zone), range) }
+        let dates = countdowns.filter { entry in
+            let c = CountdownDates.calendar(entry)
+            guard let start = civil.date(in: c.timeZone), let end = c.date(byAdding: .day, value: 1, to: start) else { return false }
+            return !CountdownDates.occurrences(entry, in: DateInterval(start: start, end: end), limit: 1).isEmpty
+        }.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        let value = Content(events: visible, allDay: visible.filter(\.allDay),
+                            placements: TimelinePlacement.make(events: visible.filter { !$0.allDay }, start: start, end: end), countdowns: dates)
+        prepared[start] = value
+        return value
+    }
+}
+
 
 struct TimelinePlacement: Identifiable {
     var id: String { event.id }

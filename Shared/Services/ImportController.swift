@@ -92,6 +92,14 @@ struct DraftReview {
         catch { errorMessage = error.localizedDescription }
     }
 
+    func discardDeletedSession(_ ids: Set<UUID>) {
+        guard ids.contains(session.id) else { return }
+        operation?.cancel(); persistence?.cancel()
+        busyMessage = nil; review = nil; consentRequest = nil; showsPlanning = false
+        conflictAcknowledgements.removeAll(); conflictSnapshot.removeAll()
+        session = ImportSession(); information = nil; errorMessage = nil
+    }
+
     func appendText(_ text: String, source: String) {
         guard !isBusy else { return }
         errorMessage = nil
@@ -512,22 +520,22 @@ struct DraftReview {
 extension ImportController {
     func restartPlanning() {
         guard !isBusy, review == nil, consentRequest == nil, let previous = session.planning else { return }
-        guard !previous.goal.isEmpty || !previous.turns.isEmpty || !session.drafts.isEmpty else { return }
+        guard !previous.goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         do {
+            // Keep the old conversation in history; restart from the same goal and range.
             try persist()
-            var fresh = ImportSession()
-            fresh.source = "帮我安排"
-            fresh.referenceTimeZone = session.referenceTimeZone
-            fresh.forcedCategory = session.forcedCategory
-            var plan = PlanningConversation(goal: "", timeZone: TimeZone(identifier: fresh.referenceTimeZone) ?? .current)
+            var fresh = session
+            fresh.id = UUID(); fresh.createdAt = .now
+            fresh.drafts = []; fresh.hasParsed = false
+            var plan = PlanningConversation(goal: previous.goal, now: session.effectiveReferenceDate,
+                                            timeZone: TimeZone(identifier: session.referenceTimeZone) ?? .current)
             plan.start = previous.start; plan.end = previous.end
             fresh.planning = plan
-            // Keep prior drafts in history; the new goal starts a separate conversation.
             guard let store = environment.store else { throw ShikeError.message("存储不可用") }
             try store.save(fresh)
             session = fresh
             conflictAcknowledgements.removeAll(); conflictSnapshot.removeAll()
-            information = nil; errorMessage = nil; planningIntent = true
+            advancePlanning()
         } catch { errorMessage = error.localizedDescription }
     }
 

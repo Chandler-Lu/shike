@@ -36,6 +36,75 @@ struct CalendarDragSelection {
     var interval: DateInterval
 }
 
+enum CalendarPaging {
+    static func direction(distance: CGFloat, velocity: CGFloat, width: CGFloat) -> Int {
+        guard width > 0 else { return 0 }
+        // A short intentional flick may page; a small slow drag springs back.
+        guard abs(distance) >= min(90, width * 0.22) || (abs(distance) >= 16 && abs(velocity) >= 450) else { return 0 }
+        return distance < 0 ? 1 : -1
+    }
+}
+
+/// Observe horizontal paging without covering event buttons or stealing vertical scrolling.
+/// Indirect scrolling also supports a trackpad on iPad and Mac Catalyst.
+struct CalendarPageInteraction: UIViewRepresentable {
+    var enabled = true
+    let onChange: (CGFloat) -> Void
+    let onEnd: (CGFloat, CGFloat) -> Void
+    func makeUIView(context: Context) -> Canvas { Canvas() }
+    func updateUIView(_ view: Canvas, context: Context) {
+        view.pagingEnabled = enabled; view.onChange = onChange; view.onEnd = onEnd
+    }
+    static func dismantleUIView(_ view: Canvas, coordinator: ()) { view.detach() }
+    final class Canvas: UIView, UIGestureRecognizerDelegate {
+        var pagingEnabled = true
+        var onChange: ((CGFloat) -> Void)?
+        var onEnd: ((CGFloat, CGFloat) -> Void)?
+        private weak var attachedWindow: UIWindow?
+        private lazy var pan: UIPanGestureRecognizer = {
+            let value = UIPanGestureRecognizer(target: self, action: #selector(changed))
+            value.maximumNumberOfTouches = 1
+            value.allowedScrollTypesMask = .all
+            value.delegate = self; value.cancelsTouchesInView = true
+            return value
+        }()
+        override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+        override func didMoveToWindow() {
+            super.didMoveToWindow(); detach()
+            if let window { window.addGestureRecognizer(pan); attachedWindow = window }
+        }
+        func detach() { attachedWindow?.removeGestureRecognizer(pan); attachedWindow = nil }
+        private func acceptsLocation(_ point: CGPoint) -> Bool {
+            guard pagingEnabled, window != nil, bounds.contains(point),
+                  window?.rootViewController?.presentedViewController == nil else { return false }
+            var parent: UIView? = self
+            while let view = parent {
+                if view.isHidden || view.alpha < 0.01 { return false }
+                if view.clipsToBounds && !view.bounds.contains(convert(point, to: view)) { return false }
+                parent = view.superview
+            }
+            return true
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldReceive touch: UITouch) -> Bool {
+            acceptsLocation(touch.location(in: self))
+        }
+        override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+            let velocity = pan.velocity(in: self)
+            return acceptsLocation(pan.location(in: self)) && abs(velocity.x) > 30 && abs(velocity.x) > abs(velocity.y) * 1.5
+        }
+        func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer, shouldRecognizeSimultaneouslyWith other: UIGestureRecognizer) -> Bool { true }
+        @objc private func changed() {
+            guard pagingEnabled else { return }
+            switch pan.state {
+            case .began, .changed: onChange?(pan.translation(in: self).x)
+            case .ended: onEnd?(pan.translation(in: self).x, pan.velocity(in: self).x)
+            case .cancelled, .failed: onEnd?(0, 0)
+            default: break
+            }
+        }
+    }
+}
+
 /// Observe a hold on this canvas without adding a hit-testing layer above event buttons.
 /// A short swipe remains a scroll; once a hold begins, it owns the drag until release.
 struct CalendarHoldInteraction: UIViewRepresentable {

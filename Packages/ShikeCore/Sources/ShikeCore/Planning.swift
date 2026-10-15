@@ -36,6 +36,21 @@ public struct PlanningConversation: Codable, Equatable, Sendable {
             throw ShikeError.message("这次问答内容较长，请新建一次安排，简要说明已确定的要求。")
         }
     }
+
+    /// Match a previously answered question despite punctuation, spacing or letter width changes.
+    /// A different clarification remains valid; no broad keyword matching is used.
+    public func hasAnsweredQuestion(_ question: String) -> Bool {
+        func normalized(_ value: String) -> String {
+            value.folding(options: [.caseInsensitive, .widthInsensitive], locale: Locale(identifier: "en_US_POSIX"))
+                .unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(String.init).joined()
+        }
+        let key = normalized(question)
+        guard !key.isEmpty else { return false }
+        return turns.indices.contains { index in
+            turns[index].role == "assistant" && normalized(turns[index].text) == key &&
+            turns.dropFirst(index + 1).contains { $0.role == "user" && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        }
+    }
 }
 
 public struct PlanningReply: Equatable, Sendable {

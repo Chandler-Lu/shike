@@ -132,9 +132,11 @@ struct PlanningView: View {
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
                         Button("重新安排") {
+                            answerFocused = false; goalFocused = false
+                            let previousID = controller.session.id
                             controller.restartPlanning()
-                            if controller.session.planning?.goal.isEmpty == true { answer = ""; answerFocused = false; goalFocused = true }
-                        }.disabled(controller.isBusy || controller.review != nil || controller.consentRequest != nil)
+                            if controller.session.id != previousID { answer = "" }
+                        }.disabled(controller.isBusy || controller.review != nil || controller.consentRequest != nil || plan?.goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty != false)
                             .accessibilityIdentifier("restartPlanning")
                     }
                     ToolbarItem(placement: .confirmationAction) { Button("收起") { controller.persistReportingError(); dismiss() }.accessibilityIdentifier("closePlanning") }
