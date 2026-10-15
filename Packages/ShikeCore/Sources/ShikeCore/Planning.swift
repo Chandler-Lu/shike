@@ -106,7 +106,12 @@ public struct CalendarEventSnapshot: Identifiable, Equatable, Sendable {
         var source = Calendar(identifier: .gregorian); source.timeZone = TimeZone(identifier: timeZone) ?? .current
         var target = Calendar(identifier: .gregorian); target.timeZone = displayZone
         let begin = target.date(from: source.dateComponents([.year, .month, .day], from: start)) ?? start
-        let finish = target.date(from: source.dateComponents([.year, .month, .day], from: end)) ?? end
+        // EventKit also returns inclusive ends such as 23:59:59. Round those up
+        // to the next civil day; keep midnight ends exclusive. Never mutate the
+        // stored dates, which are still needed to resolve and edit the occurrence.
+        let endDay = source.startOfDay(for: end)
+        let exclusiveEnd = end > endDay ? source.date(byAdding: .day, value: 1, to: endDay) ?? end : endDay
+        let finish = target.date(from: source.dateComponents([.year, .month, .day], from: exclusiveEnd)) ?? exclusiveEnd
         return DateInterval(start: begin, end: max(begin, finish))
     }
     public init(eventID: String, itemID: String, calendarID: String, title: String, start: Date, end: Date,

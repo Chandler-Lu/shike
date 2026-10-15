@@ -15,12 +15,13 @@
 	</array>
 	<key>NSUbiquitousContainers</key>
 	<dict>
-		<key>$(SHIKE_CLOUD_CONTAINER)</key>
+		<!-- Xcode expands values, not dictionary keys. Keep this literal in sync with ShikeCloudContainer. -->
+		<key>iCloud.com.chandler.shike</key>
 		<dict>
 			<key>NSUbiquitousContainerIsDocumentScopePublic</key>
 			<true/>
 			<key>NSUbiquitousContainerName</key>
-			<string>拾刻</string>
+			<string>拾刻计划</string>
 			<key>NSUbiquitousContainerSupportedFolderLevels</key>
 			<string>Any</string>
 		</dict>

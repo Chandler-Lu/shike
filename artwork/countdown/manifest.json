@@ -1,0 +1,122 @@
+[
+  {
+    "id": "rabbit-01",
+    "asset": "CountdownArtRabbit01",
+    "subject": "white lop-eared bunny wearing a blue scarf, belly-down reading an open green journal",
+    "file": "App/Assets.xcassets/CountdownArtRabbit01.imageset/illustration.png"
+  },
+  {
+    "id": "rabbit-02",
+    "asset": "CountdownArtRabbit02",
+    "subject": "cinnamon dwarf rabbit with upright ears, hugging a small blue journal",
+    "file": "App/Assets.xcassets/CountdownArtRabbit02.imageset/illustration.png"
+  },
+  {
+    "id": "rabbit-03",
+    "asset": "CountdownArtRabbit03",
+    "subject": "fluffy white Angora bunny with grey ears, napping beside an open book",
+    "file": "App/Assets.xcassets/CountdownArtRabbit03.imageset/illustration.png"
+  },
+  {
+    "id": "rabbit-04",
+    "asset": "CountdownArtRabbit04",
+    "subject": "black-and-white Dutch bunny, belly-down reading a green notebook",
+    "file": "App/Assets.xcassets/CountdownArtRabbit04.imageset/illustration.png"
+  },
+  {
+    "id": "rabbit-05",
+    "asset": "CountdownArtRabbit05",
+    "subject": "beige lop-eared bunny with a green pencil and open journal",
+    "file": "App/Assets.xcassets/CountdownArtRabbit05.imageset/illustration.png"
+  },
+  {
+    "id": "cat-01",
+    "asset": "CountdownArtCat01",
+    "subject": "one fluffy brown tabby Maine Coon kitten with long ear tufts and a magnificent bushy tail, lying on its belly reading an open green notebook",
+    "file": "App/Assets.xcassets/CountdownArtCat01.imageset/illustration.png"
+  },
+  {
+    "id": "cat-02",
+    "asset": "CountdownArtCat02",
+    "subject": "one round silver-blue British shorthair kitten with golden eyes, hugging a small cream-colored closed journal",
+    "file": "App/Assets.xcassets/CountdownArtCat02.imageset/illustration.png"
+  },
+  {
+    "id": "cat-03",
+    "asset": "CountdownArtCat03",
+    "subject": "one cream and seal-point ragdoll kitten with blue eyes and a fluffy tail, lying beside a small open pale-blue book",
+    "file": "App/Assets.xcassets/CountdownArtCat03.imageset/illustration.png"
+  },
+  {
+    "id": "cat-04",
+    "asset": "CountdownArtCat04",
+    "subject": "one orange tabby kitten with white paws, curled asleep beside an open journal",
+    "file": "App/Assets.xcassets/CountdownArtCat04.imageset/illustration.png"
+  },
+  {
+    "id": "cat-05",
+    "asset": "CountdownArtCat05",
+    "subject": "one fluffy black-and-white tuxedo kitten with a white muzzle and pink nose, sitting with a green pencil and a small open notebook",
+    "file": "App/Assets.xcassets/CountdownArtCat05.imageset/illustration.png"
+  },
+  {
+    "id": "pair-01",
+    "asset": "CountdownArtPair01",
+    "subject": "One white lop-eared bunny in a tiny blue scarf and one fluffy brown tabby Maine Coon with long ear tufts, lying belly-down side by side, smiling while sharing an open green journal.",
+    "file": "App/Assets.xcassets/CountdownArtPair01.imageset/illustration.png"
+  },
+  {
+    "id": "pair-02",
+    "asset": "CountdownArtPair02",
+    "subject": "One cinnamon dwarf rabbit with upright ears and one round silver-blue British shorthair cat with golden eyes, cuddled together sitting behind an open pale-blue notebook, each resting a paw on its pages.",
+    "file": "App/Assets.xcassets/CountdownArtPair02.imageset/illustration.png"
+  },
+  {
+    "id": "pair-03",
+    "asset": "CountdownArtPair03",
+    "subject": "One fluffy white Angora rabbit with light grey ears and one cream-and-seal ragdoll cat with blue eyes, lying together reading an open cream journal, tails gently curled.",
+    "file": "App/Assets.xcassets/CountdownArtPair03.imageset/illustration.png"
+  },
+  {
+    "id": "pair-04",
+    "asset": "CountdownArtPair04",
+    "subject": "One small black-and-white Dutch rabbit and one orange tabby cat with white paws, cheek to cheek belly-down reading a green notebook, warm happy faces.",
+    "file": "App/Assets.xcassets/CountdownArtPair04.imageset/illustration.png"
+  },
+  {
+    "id": "pair-05",
+    "asset": "CountdownArtPair05",
+    "subject": "One beige lop-eared bunny and one fluffy black-and-white tuxedo cat, sitting closely together drawing tiny flowers in a blue open journal, one shared green pencil.",
+    "file": "App/Assets.xcassets/CountdownArtPair05.imageset/illustration.png"
+  },
+  {
+    "id": "pair-06",
+    "asset": "CountdownArtPair06",
+    "subject": "One fluffy grey lionhead rabbit and one ginger long-haired Maine Coon, sitting shoulder to shoulder holding a little closed sage-green journal together, contented smiles.",
+    "file": "App/Assets.xcassets/CountdownArtPair06.imageset/illustration.png"
+  },
+  {
+    "id": "pair-07",
+    "asset": "CountdownArtPair07",
+    "subject": "One white bunny with upright pink ears and one soft calico kitten, lying curled up asleep beside one small open cream-colored storybook, touching gently, full bodies visible.",
+    "file": "App/Assets.xcassets/CountdownArtPair07.imageset/illustration.png"
+  },
+  {
+    "id": "pair-08",
+    "asset": "CountdownArtPair08",
+    "subject": "One caramel lop-eared rabbit and one silver tabby kitten, seated close together peeking into an open pale-blue keepsake journal, a tiny heart doodle on the page, warm blush cheeks.",
+    "file": "App/Assets.xcassets/CountdownArtPair08.imageset/illustration.png"
+  },
+  {
+    "id": "pair-09",
+    "asset": "CountdownArtPair09",
+    "subject": "One black-and-white Dutch bunny and one fluffy snow-white Persian cat with round blue eyes, belly-down reading one open sage-green book, ears and fluffy tail fully visible.",
+    "file": "App/Assets.xcassets/CountdownArtPair09.imageset/illustration.png"
+  },
+  {
+    "id": "pair-10",
+    "asset": "CountdownArtPair10",
+    "subject": "One cream-colored dwarf bunny with small upright ears and one fluffy chocolate-and-cream ragdoll cat, cuddled beside an open pastel-blue notebook, the bunny holding a small pencil and the cat resting its paw near the page.",
+    "file": "App/Assets.xcassets/CountdownArtPair10.imageset/illustration.png"
+  }
+]

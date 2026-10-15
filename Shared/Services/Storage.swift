@@ -13,6 +13,12 @@ enum AppIdentity {
         false
         #endif
     }
+    static var usesDemoCalendar: Bool {
+        #if DEBUG && targetEnvironment(simulator)
+        if isUITesting && ProcessInfo.processInfo.arguments.contains("-native-calendar-testing") { return false }
+        #endif
+        return isUITesting
+    }
     static var usesFixtureModel: Bool {
         #if DEBUG
         if isUITesting { return true }

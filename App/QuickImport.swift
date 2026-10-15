@@ -39,6 +39,11 @@ final class QuickActionAppDelegate: NSObject, UIApplicationDelegate {
 
 final class QuickActionSceneDelegate: NSObject, UIWindowSceneDelegate {
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        #if targetEnvironment(macCatalyst)
+        if let window = scene as? UIWindowScene {
+            window.sizeRestrictions?.minimumSize = CGSize(width: 640, height: 600)
+        }
+        #endif
         if let item = connectionOptions.shortcutItem { _ = QuickImportRouter.shared.receive(item) }
     }
     func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem,

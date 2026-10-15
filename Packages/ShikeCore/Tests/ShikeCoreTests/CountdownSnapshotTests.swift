@@ -89,6 +89,43 @@ final class CountdownSnapshotTests: XCTestCase {
         XCTAssertNil(single.secondary); XCTAssertEqual(single.remainingCount, 0)
     }
 
+    func testSpecifiedPairKeepsChosenOrderRegardlessOfDatesAndPins() {
+        let now = CivilDate(year: 2026, month: 10, day: 14).date(in: zone)!
+        let near = Countdown(title: "三天后", date: CivilDate(year: 2026, month: 10, day: 17))
+        var far = Countdown(title: "十天后", date: CivilDate(year: 2026, month: 10, day: 24)); far.pinned = true
+        let recent = Countdown(title: "昨天", date: CivilDate(year: 2026, month: 10, day: 13))
+        var older = Countdown(title: "十天前", date: CivilDate(year: 2026, month: 10, day: 4)); older.pinned = true
+        for (a, b) in [(far, near), (older, near), (older, recent)] {
+            for pair in [[a, b], [b, a]] {
+                let result = CountdownWidgetSelection(pair, limitPerSection: 1, now: now, systemZone: zone, preserveOrder: true)
+                XCTAssertEqual(result.primary?.id, pair[0].id)
+                XCTAssertEqual(result.secondary?.id, pair[1].id)
+                XCTAssertEqual(result.visibleCount, 2)
+                XCTAssertEqual(result.remainingCount, 0)
+            }
+        }
+    }
+
+    func testSpecifiedPairKeepsChosenOrderAfterExactTargetPassesAndAtMidnight() {
+        let day = CivilDate(year: 2026, month: 10, day: 14).date(in: zone)!
+        var morning = Countdown(title: "上午", date: CivilDate(year: 2026, month: 10, day: 14))
+        morning.timeZoneIdentifier = zone.identifier; morning.targetTime = CountdownTime(hour: 10, minute: 0)
+        var afternoon = morning; afternoon.id = UUID(); afternoon.title = "下午"; afternoon.targetTime = CountdownTime(hour: 14, minute: 0)
+        let values = [afternoon, morning]
+        for hour in [9, 11, 15] {
+            let result = CountdownWidgetSelection(values, limitPerSection: 1, now: day.addingTimeInterval(Double(hour) * 3600), systemZone: zone, preserveOrder: true)
+            XCTAssertEqual(result.primary?.id, afternoon.id)
+            XCTAssertEqual(result.secondary?.id, morning.id)
+        }
+        let today = Countdown(title: "今天", date: CivilDate(year: 2026, month: 10, day: 14))
+        let tomorrow = Countdown(title: "明天", date: CivilDate(year: 2026, month: 10, day: 15))
+        for offset in [86399.0, 86400.0] {
+            let result = CountdownWidgetSelection([today, tomorrow], limitPerSection: 1, now: day.addingTimeInterval(offset), systemZone: zone, preserveOrder: true)
+            XCTAssertEqual(result.primary?.id, today.id)
+            XCTAssertEqual(result.secondary?.id, tomorrow.id)
+        }
+    }
+
     func testWidgetTodayInclusiveAndRecurringBirthdayClassification() {
         let now = CivilDate(year: 2026, month: 10, day: 14).date(in: zone)!
         let today = Countdown(title: "今天", date: CivilDate(year: 2026, month: 10, day: 14))

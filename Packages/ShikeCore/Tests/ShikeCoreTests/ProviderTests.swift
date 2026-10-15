@@ -45,8 +45,8 @@ final class ProviderTests: XCTestCase {
     }
     func testGeminiRequestDoesNotPutKeyInURLAndIgnoresThoughts() async throws {
         MockURLProtocol.handler = { request in
-            XCTAssertEqual(request.url?.path, "/custom/models/fixture-model:generateContent")
-            XCTAssertNil(request.url?.query)
+            XCTAssertEqual(request.url?.path, "/custom/models/fixture-model:streamGenerateContent")
+            XCTAssertEqual(request.url?.query, "alt=sse")
             XCTAssertEqual(request.value(forHTTPHeaderField: "x-goog-api-key"), "fixture-key")
             XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
             let payload = try self.body(request)

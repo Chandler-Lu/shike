@@ -22,10 +22,40 @@ struct CountdownGroupQuery: EntityQuery {
         [.all, .init(id: "none", name: "未分类")] + ((try? CountdownSnapshotStorage.read())?.categories ?? []).map { .init(id: $0.id.uuidString, name: $0.name) }
     }
 }
+struct CountdownDayEntity: AppEntity {
+    static var typeDisplayRepresentation = TypeDisplayRepresentation(name: "指定日子")
+    static var defaultQuery = CountdownDayQuery()
+    // Optional AppEntity pickers do not consistently offer a system Clear action.
+    // Keep the UUID identifier type so existing widget configurations still resolve.
+    static let unselectedID = UUID(uuidString: "00000000-0000-0000-0000-000000000000")!
+    static var unselected: Self { .init(id: unselectedID, name: "留空", date: "不指定日子") }
+    var id: UUID
+    var name: String
+    var date: String
+    var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)", subtitle: "\(date)") }
+}
+struct CountdownDayQuery: EntityStringQuery {
+    private func choices() -> [CountdownDayEntity] {
+        [CountdownDayEntity.unselected] + ((try? CountdownSnapshotStorage.read())?.items ?? []).map {
+            CountdownDayEntity(id: $0.id, name: $0.title, date: $0.anchorDate.description)
+        }.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+    func entities(for identifiers: [UUID]) async throws -> [CountdownDayEntity] {
+        let values = choices()
+        return identifiers.map { id in values.first { $0.id == id } ?? .init(id: id, name: "日子已删除", date: "请重新选择") }
+    }
+    func suggestedEntities() async throws -> [CountdownDayEntity] { choices() }
+    func defaultResult() async -> CountdownDayEntity? { .unselected }
+    func entities(matching string: String) async throws -> [CountdownDayEntity] {
+        choices().filter { $0.id == CountdownDayEntity.unselectedID || string.isEmpty || $0.name.localizedStandardContains(string) }
+    }
+}
 struct CountdownWidgetIntent: WidgetConfigurationIntent {
-    static var title: LocalizedStringResource = "选择倒数日分组"
-    static var description = IntentDescription("显示一个分组，或者全部日子。")
+    static var title: LocalizedStringResource = "选择展示日子"
+    static var description = IntentDescription("可指定一或两个日子。小号与锁屏优先显示第一个，中号与大号平等展示。选择“留空”可取消指定；两个都留空时按分组自动选择。")
     @Parameter(title: "显示分组") var group: CountdownGroupEntity?
+    @Parameter(title: "第一个日子（可选）") var countdown: CountdownDayEntity?
+    @Parameter(title: "第二个日子（可选）") var secondCountdown: CountdownDayEntity?
     init() { group = .all }
     init(group: CountdownGroupEntity) { self.group = group }
 }
@@ -34,6 +64,26 @@ struct CountdownWidgetEntry: TimelineEntry {
     let snapshot: CountdownSnapshot?
     let group: String
     var unavailable = false
+    var countdownID: UUID? = nil
+    var secondCountdownID: UUID? = nil
+    private var specifiedIDs: [UUID] {
+        var seen = Set<UUID>()
+        return [countdownID, secondCountdownID].compactMap { $0 }.filter {
+            $0 != CountdownDayEntity.unselectedID && seen.insert($0).inserted
+        }
+    }
+    var hasSpecifiedDays: Bool { !specifiedIDs.isEmpty }
+    var displayedEntries: [Countdown] {
+        if hasSpecifiedDays {
+            return specifiedIDs.compactMap { id in snapshot?.items.first { $0.id == id }?.countdown }
+        }
+        return snapshot?.entries(in: group, now: date) ?? []
+    }
+    func selection(limitPerSection: Int = 1) -> CountdownWidgetSelection {
+        CountdownWidgetSelection(displayedEntries, limitPerSection: limitPerSection, now: date, preserveOrder: hasSpecifiedDays)
+    }
+    var displayedName: String? { hasSpecifiedDays ? "指定日子" : snapshot?.name(for: group) }
+    var routeGroup: String { hasSpecifiedDays ? "all" : group }
     static var preview: Self {
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = .current
         let titles = ["下一次，一起去看海", "每年的小小纪念", "回家吃一顿饭", "在一起的日子", "第一次远行", "开始新的生活"]
@@ -53,9 +103,9 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
     }
     func timeline(for configuration: CountdownWidgetIntent, in context: Context) async -> Timeline<CountdownWidgetEntry> {
         let value = load(configuration)
-        let entries = value.snapshot?.entries(in: value.group, now: value.date) ?? []
+        let entries = value.displayedEntries
         let dates = CountdownPresentation.timelineDates(entries, now: value.date)
-        return Timeline(entries: dates.map { .init(date: $0, snapshot: value.snapshot, group: value.group, unavailable: value.unavailable) }, policy: .atEnd)
+        return Timeline(entries: dates.map { .init(date: $0, snapshot: value.snapshot, group: value.group, unavailable: value.unavailable, countdownID: value.countdownID, secondCountdownID: value.secondCountdownID) }, policy: .atEnd)
     }
     func recommendations() -> [AppIntentRecommendation<CountdownWidgetIntent>] {
         #if os(watchOS)
@@ -64,8 +114,8 @@ struct CountdownWidgetProvider: AppIntentTimelineProvider {
         return CountdownGroupQuery.groups().map { AppIntentRecommendation(intent: CountdownWidgetIntent(group: $0), description: $0.name) }
     }
     private func load(_ configuration: CountdownWidgetIntent) -> CountdownWidgetEntry {
-        do { return .init(date: .now, snapshot: try CountdownSnapshotStorage.read(), group: configuration.group?.id ?? "all") }
-        catch { return .init(date: .now, snapshot: nil, group: configuration.group?.id ?? "all", unavailable: true) }
+        do { return .init(date: .now, snapshot: try CountdownSnapshotStorage.read(), group: configuration.group?.id ?? "all", countdownID: configuration.countdown?.id, secondCountdownID: configuration.secondCountdown?.id) }
+        catch { return .init(date: .now, snapshot: nil, group: configuration.group?.id ?? "all", unavailable: true, countdownID: configuration.countdown?.id, secondCountdownID: configuration.secondCountdown?.id) }
     }
 }
 
@@ -73,10 +123,103 @@ struct CountdownWidgetView: View {
     let entry: CountdownWidgetEntry
     @Environment(\.widgetFamily) private var family
     var body: some View {
+        #if os(iOS) && !targetEnvironment(macCatalyst)
+        if [.accessoryInline, .accessoryCircular, .accessoryRectangular].contains(family) {
+            CountdownLockScreenContent(entry: entry, family: family)
+                .containerBackground(for: .widget) { Color.clear }
+        } else {
+            desktopContent
+        }
+        #else
+        desktopContent
+        #endif
+    }
+    private var desktopContent: some View {
         CountdownWidgetContent(entry: entry, family: family)
             .containerBackground(for: .widget) { CompanionPaper() }
     }
 }
+
+#if os(iOS) && !targetEnvironment(macCatalyst)
+/// Lock Screen uses the system's monochrome treatment and small accessory canvas.
+struct CountdownLockScreenContent: View {
+    let entry: CountdownWidgetEntry
+    let family: WidgetFamily
+    private var selection: CountdownWidgetSelection {
+        entry.selection()
+    }
+    private var emptyMessage: String {
+        if entry.unavailable { return "打开拾刻计划重试" }
+        if entry.snapshot == nil { return "打开拾刻计划添加日子" }
+        if entry.hasSpecifiedDays { return "日子已删除，请重新选择" }
+        if entry.snapshot?.name(for: entry.group) == nil { return "请重新选择分组" }
+        return "这个分组还没有日子"
+    }
+    var body: some View {
+        Group {
+            if let primary = selection.primary {
+                let value = CountdownDisplayValue(primary, now: entry.date)
+                switch family {
+                case .accessoryInline:
+                    if primary.targetTime != nil {
+                        Label {
+                            Text("\(value.status) ") + Text(value.target, style: .timer) + Text(" · \(primary.title)")
+                        } icon: { Image(systemName: value.phase == .elapsed ? "heart" : "calendar") }
+                    } else {
+                        Label("\(countLabel(primary)) · \(primary.title)", systemImage: value.phase == .elapsed ? "heart" : "calendar")
+                    }
+                case .accessoryCircular:
+                    ZStack {
+                        AccessoryWidgetBackground()
+                        VStack(spacing: 1) {
+                            Text(value.phase == .today ? "就在" : value.status).font(.system(size: 10))
+                            Text(value.phase == .today ? "今天" : "\(value.days)天")
+                                .font(.system(size: 21, weight: .semibold, design: .rounded)).monospacedDigit()
+                                .lineLimit(1).minimumScaleFactor(0.45).widgetAccentable()
+                            Text(primary.title).font(.system(size: 9)).lineLimit(1)
+                        }.padding(4)
+                    }.accessibilityElement(children: .ignore).accessibilityLabel("\(primary.title)，\(value.label)")
+                default:
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(primary.title).font(.headline).lineLimit(1).widgetAccentable()
+                        HStack(alignment: .firstTextBaseline, spacing: 5) {
+                            if primary.targetTime != nil {
+                                Text(value.status).font(.caption2)
+                                Text(value.target, style: .timer).monospacedDigit().font(.system(size: 20, weight: .semibold, design: .rounded))
+                            } else {
+                                Text(countLabel(primary)).font(.system(size: 21, weight: .semibold, design: .rounded)).monospacedDigit()
+                            }
+                        }.lineLimit(1).minimumScaleFactor(0.6)
+                        if let secondary = selection.secondary {
+                            HStack(spacing: 4) {
+                                Text(secondary.title).lineLimit(1).frame(maxWidth: .infinity, alignment: .leading)
+                                Text(countLabel(secondary)).lineLimit(1).fixedSize()
+                            }.font(.caption2)
+                        } else {
+                            Text(value.date.description + (primary.calendar == .chinese ? " · 农历" : ""))
+                                .font(.caption2).lineLimit(1)
+                        }
+                    }.frame(maxWidth: .infinity, alignment: .leading)
+                }
+            } else if family == .accessoryCircular {
+                ZStack {
+                    AccessoryWidgetBackground()
+                    VStack(spacing: 3) { Image(systemName: "calendar.badge.plus"); Text("打开拾刻").font(.system(size: 10)) }
+                }.accessibilityLabel(emptyMessage)
+            } else {
+                Label(emptyMessage, systemImage: "calendar.badge.plus").font(.caption)
+            }
+        }
+        .foregroundStyle(.primary)
+        .privacySensitive()
+        .widgetURL(CountdownRoute(group: entry.routeGroup, id: selection.primary?.id).url)
+    }
+    private func countLabel(_ countdown: Countdown) -> String {
+        let value = CountdownDisplayValue(countdown, now: entry.date)
+        return value.phase == .today ? "就是今天" : "\(value.status) \(value.days) 天"
+    }
+}
+#endif
 struct CountdownWidgetContent: View {
     let entry: CountdownWidgetEntry
     let family: WidgetFamily
@@ -100,25 +243,36 @@ struct CountdownWidgetContent: View {
         #endif
     }
     private var sectionLimit: Int { isLarge ? (typeSize.isAccessibilitySize ? 2 : 3) : 1 }
+    private var isAccessory: Bool {
+        #if os(macOS) || targetEnvironment(macCatalyst)
+        false
+        #else
+        family == .accessoryRectangular
+        #endif
+    }
     private var secondaryInk: Color { ink.opacity(0.7) }
     private var memoryColor: Color { scheme == .dark ? Color(red: 0.69, green: 0.85, blue: 0.73) : Color(red: 0.25, green: 0.44, blue: 0.34) }
     var body: some View {
         let snapshot = entry.snapshot
-        let name = snapshot?.name(for: entry.group)
-        let entries = snapshot?.entries(in: entry.group, now: entry.date) ?? []
-        let selection = CountdownWidgetSelection(entries, limitPerSection: sectionLimit, now: entry.date)
+        let name = entry.displayedName
+        let entries = entry.displayedEntries
+        let selection = entry.selection(limitPerSection: sectionLimit)
         VStack(alignment: .leading, spacing: isSmall ? 5 : 8) {
             if snapshot == nil || name == nil || entries.isEmpty {
                 Label("拾刻计划 · 倒数日", systemImage: "heart.text.clipboard").font(.caption)
                 Spacer(minLength: 0)
-                Text(emptyMessage(snapshot: snapshot, name: name)).font(CompanionStyle.handwriting(family == .accessoryRectangular ? 13 : 19))
+                Text(emptyMessage(snapshot: snapshot, name: name)).font(CompanionStyle.handwriting(isAccessory ? 13 : 19))
                     .fixedSize(horizontal: false, vertical: true)
                 Spacer(minLength: 0)
-            } else if family == .accessoryRectangular {
+            } else if isAccessory {
                 // The Watch keeps its compact two-row design.
-                accessory(entries: entries, name: name!)
+                accessory(entries: entry.hasSpecifiedDays ? [selection.primary, selection.secondary].compactMap { $0 } : entries, name: name!)
             } else if isSmall, let primary = selection.primary {
                 small(primary: primary, secondary: selection.secondary, name: name!)
+            } else if entry.hasSpecifiedDays {
+                header(name: name!, total: entries.count)
+                specified(entries).frame(maxHeight: .infinity)
+                yearFooter(remaining: 0)
             } else {
                 header(name: name!, total: entries.count)
                 if !selection.upcoming.isEmpty && !selection.elapsed.isEmpty {
@@ -137,11 +291,11 @@ struct CountdownWidgetContent: View {
         }
         .foregroundStyle(ink)
         .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
-        .widgetURL(CountdownRoute(group: entry.group, id: isSmall ? selection.primary?.id : nil).url)
+        .widgetURL(CountdownRoute(group: entry.routeGroup, id: isSmall ? selection.primary?.id : nil).url)
     }
 
     private func header(name: String, total: Int) -> some View {
-        Link(destination: CountdownRoute(group: entry.group).url) {
+        Link(destination: CountdownRoute(group: entry.routeGroup).url) {
             HStack(spacing: 4) {
                 Image(systemName: "book.closed").font(.system(size: 10))
                 Text(name).lineLimit(1)
@@ -177,11 +331,28 @@ struct CountdownWidgetContent: View {
         }
     }
 
+    private func specified(_ entries: [Countdown]) -> some View {
+        let layout = isLarge ? AnyLayout(VStackLayout(alignment: .leading, spacing: 14)) : AnyLayout(HStackLayout(alignment: .top, spacing: 14))
+        return layout {
+            ForEach(entries) { value in
+                Link(destination: CountdownRoute(group: entry.routeGroup, id: value.id).url) {
+                    VStack(alignment: .leading, spacing: isLarge ? 6 : 3) {
+                        title(value, size: isLarge ? 22 : 16, lines: isLarge ? 2 : 1)
+                        dayCount(value, size: isLarge ? 40 : 30, inlineStatus: true)
+                        dateCaption(value, showCalendar: true)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                }.buttonStyle(.plain)
+            }
+        }
+    }
+
     private func section(_ values: [Countdown], elapsed: Bool) -> some View {
         VStack(alignment: .leading, spacing: 4) {
             sectionHeading(elapsed: elapsed)
             ForEach(values) { value in
-                Link(destination: CountdownRoute(group: entry.group, id: value.id).url) {
+                Link(destination: CountdownRoute(group: entry.routeGroup, id: value.id).url) {
                     VStack(alignment: .leading, spacing: 2) {
                         title(value, size: isLarge ? 15 : 16, lines: isLarge ? 2 : 1, reserveTitleSpace: isLarge)
                         dayCount(value, size: isLarge ? 24 : 30, inlineStatus: false)
@@ -204,7 +375,7 @@ struct CountdownWidgetContent: View {
         VStack(alignment: .leading, spacing: 6) {
             sectionHeading(elapsed: elapsed)
             ForEach(values) { value in
-                Link(destination: CountdownRoute(group: entry.group, id: value.id).url) {
+                Link(destination: CountdownRoute(group: entry.routeGroup, id: value.id).url) {
                     HStack(spacing: 10) {
                         VStack(alignment: .leading, spacing: 3) {
                             title(value, size: 17)
@@ -301,7 +472,7 @@ struct CountdownWidgetContent: View {
         VStack(alignment: .leading, spacing: 3) {
             Text(name).font(.caption2).foregroundStyle(secondaryInk).lineLimit(1)
             ForEach(Array(entries.prefix(2))) { value in
-                Link(destination: CountdownRoute(group: entry.group, id: value.id).url) {
+                Link(destination: CountdownRoute(group: entry.routeGroup, id: value.id).url) {
                     HStack(spacing: 8) {
                         Text(value.title).font(CompanionStyle.handwriting(14)).lineLimit(1).foregroundStyle(ink)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -320,6 +491,7 @@ struct CountdownWidgetContent: View {
             return "打开拾刻计划，记下值得期待的日子。"
             #endif
         }
+        if entry.hasSpecifiedDays { return "指定日子已删除，请重新选择。" }
         if name == nil { return "分组已删除，请重新选择。" }
         return "这个分组，还没有日子。"
     }

@@ -1,3 +1,4 @@
+#if !targetEnvironment(macCatalyst)
 import XCTest
 
 final class ShikeUITests: XCTestCase {
@@ -269,19 +270,10 @@ final class ShikeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["editCountdown"].waitForExistence(timeout: 8))
         let export = app.buttons["exportCountdownImage"]
         revealForReview(export, app: app); export.tap()
-        let save = app.buttons["saveCountdownPNG"]
-        XCTAssertTrue(save.waitForExistence(timeout: 8)); capture("countdown-image-preview", app: app)
-        revealInCountdownSheet(save, app: app); save.tap()
-        // Files hides its filename field at accessibility sizes; the save action
-        // and successful completion are the actual export contract.
-        XCTAssertTrue(app.buttons["DOCPicker.actionButton"].waitForExistence(timeout: 8))
-        let filename = app.textFields["DOCPicker.filenameTextField"]
-        if filename.exists && filename.isHittable {
-            filename.tap(); filename.typeText("-" + UUID().uuidString.prefix(8))
-        }
-        app.buttons["DOCPicker.actionButton"].tap()
-        if app.alerts.buttons["替换"].waitForExistence(timeout: 1) { app.alerts.buttons["替换"].tap() }
-        XCTAssertTrue(app.staticTexts["卡片图片已保存。"].waitForExistence(timeout: 8))
+        let share = app.buttons["shareCountdownPNG"]
+        XCTAssertTrue(share.waitForExistence(timeout: 8)); capture("countdown-image-preview", app: app)
+        XCTAssertFalse(app.buttons["saveCountdownPNG"].exists)
+        revealInCountdownSheet(share, app: app); XCTAssertTrue(share.isEnabled)
         app.navigationBars["卡片图片"].buttons["完成"].tap()
         app.buttons["editCountdown"].tap()
         XCTAssertEqual(app.switches["countdownPreciseTime"].value as? String, "1")
@@ -1078,3 +1070,5 @@ final class ShikeUITests: XCTestCase {
         add(attachment)
     }
 }
+
+#endif

@@ -4,6 +4,41 @@ import ShikeCore
 @testable import Shike
 
 final class CountdownServiceTests: XCTestCase {
+    @MainActor func testBatchMoveAndDeleteAreAtomicDurableAndPreserveUnselectedEntries() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("countdowns.json")
+        let store = CountdownStore(url: url)
+        var first = Countdown(title: "纪念日")
+        first.notes = "保留备注"; first.pinned = true; first.reminder.milestones = [520, 1314]
+        let second = Countdown(title: "生日"), untouched = Countdown(title: "不改变的日子")
+        try store.insert([first, second, untouched])
+        let ids: Set<UUID> = [first.id, second.id]
+        let group = try XCTUnwrap(store.categories.first?.id)
+        var changes = 0; store.onChange = { changes += 1 }
+        let before = store.records
+        XCTAssertThrowsError(try store.moveEntries(ids, to: UUID()))
+        XCTAssertThrowsError(try store.deleteEntries(ids.union([UUID()])))
+        XCTAssertEqual(store.records, before); XCTAssertEqual(changes, 0)
+        try store.moveEntries(ids, to: group)
+        XCTAssertEqual(changes, 1)
+        let moved = try XCTUnwrap(store.entries.first { $0.id == first.id })
+        first.categoryID = group
+        XCTAssertEqual(moved, first)
+        XCTAssertEqual(store.entries.first { $0.id == untouched.id }, untouched)
+        XCTAssertTrue(ids.isSubset(of: store.document.pending))
+        let reopened = CountdownStore(url: url)
+        XCTAssertEqual(reopened.entries.filter { $0.categoryID == group }.count, 2)
+        try reopened.moveEntries(ids, to: nil)
+        XCTAssertTrue(reopened.entries.allSatisfy { $0.categoryID == nil })
+        try reopened.deleteEntries(ids)
+        let final = CountdownStore(url: url)
+        XCTAssertEqual(final.entries, [untouched])
+        XCTAssertTrue(final.records.filter { ids.contains($0.id) }.allSatisfy { $0.deleted && $0.countdown == nil })
+        XCTAssertTrue(ids.isSubset(of: final.document.pending))
+        XCTAssertThrowsError(try final.moveEntries(ids, to: group))
+    }
     @MainActor func testCountdownRecognitionRequiresConsentForTheCurrentRecipient() throws {
         let name = "Shike.CountdownConsent.\(UUID())"
         let defaults = UserDefaults(suiteName: name)!

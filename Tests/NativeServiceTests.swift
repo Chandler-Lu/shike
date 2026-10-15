@@ -239,9 +239,13 @@ final class NativeServiceTests: XCTestCase {
 
     func testReleaseLegalResourcesAndDeviceConfiguration() throws {
         let policy = try String(contentsOf: XCTUnwrap(Bundle.main.url(forResource: "PrivacyPolicy", withExtension: "txt")), encoding: .utf8)
-        XCTAssertTrue(policy.contains("trlu1997@outlook.com"))
+        XCTAssertTrue(policy.contains("shike@yeslu.cn"))
         XCTAssertNotNil(Bundle.main.url(forResource: "OFL", withExtension: "txt"))
-        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "UIDeviceFamily") as? [Int], [1])
+        #if targetEnvironment(macCatalyst)
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "DTPlatformName") as? String, "macosx")
+        #else
+        XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "UIDeviceFamily") as? [Int], [1, 2])
+        #endif
         XCTAssertEqual(Bundle.main.object(forInfoDictionaryKey: "ITSAppUsesNonExemptEncryption") as? Bool, false)
     }
 

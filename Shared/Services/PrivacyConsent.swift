@@ -54,9 +54,9 @@ struct ExtractionConsent: Codable, Equatable, Identifiable {
 }
 
 enum AppLegal {
-    static let privacyURL = URL(string: "https://www.yeslu.cn/shike/privacy/")!
-    static let supportURL = URL(string: "https://www.yeslu.cn/shike/support/")!
-    static let emailURL = URL(string: "mailto:trlu1997@outlook.com?subject=Shike%20Support")!
+    static let privacyURL = URL(string: "https://github.com/Chandler-Lu/shike/blob/main/PRIVACY.md")!
+    static let supportURL = URL(string: "https://github.com/Chandler-Lu/shike/issues")!
+    static let emailURL = URL(string: "mailto:shike@yeslu.cn?subject=Shike%20Support")!
     static var version: String {
         let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
         let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"

@@ -1,6 +1,7 @@
 import SwiftUI
 import PhotosUI
 import AVFoundation
+import UniformTypeIdentifiers
 import ShikeCore
 
 struct RootView: View {
@@ -8,9 +9,11 @@ struct RootView: View {
     @ObservedObject var environment: AppEnvironment
     @StateObject private var controller: ImportController
     @StateObject private var countdownCoordinator: CountdownCoordinator
-    @State private var selection = 0
+    @EnvironmentObject private var workspace: Workspace
+    private var selection: Int { workspace.selection }
     @StateObject private var quickImport = QuickImportRouter.shared
     @StateObject private var countdownNavigation = CountdownNavigation()
+    @StateObject private var shortcutInbox = ShortcutInbox.shared
 
     init(environment: AppEnvironment) {
         self.environment = environment
@@ -19,7 +22,13 @@ struct RootView: View {
         _controller = StateObject(wrappedValue: ImportController(environment: environment, session: unfinished ?? ImportSession()))
     }
     var body: some View {
-        TabView(selection: $selection) {
+        GeometryReader { geometry in
+            let showsSidebar = geometry.size.width >= 820 && workspace.sidebarOverride != false
+            HStack(spacing: 0) {
+                WorkspaceSidebar(workspace: workspace)
+                    .frame(width: showsSidebar ? 220 : 0).clipped()
+                    .accessibilityHidden(!showsSidebar)
+                TabView(selection: $workspace.selection) {
             NavigationStack { HomeView(controller: controller) }
                 .tabItem { Label("导入", systemImage: "square.and.pencil") }.tag(0)
             NavigationStack { CalendarScreen(calendars: environment.calendars, preferences: environment.preferences, countdowns: environment.countdowns, reminders: countdownCoordinator.reminders) }
@@ -30,13 +39,25 @@ struct RootView: View {
                 .tabItem { Label("记录", systemImage: "book.closed") }.tag(1)
             NavigationStack { SettingsView(environment: environment, countdownSync: countdownCoordinator.sync) }
                 .tabItem { Label("设置", systemImage: "slider.horizontal.3") }.tag(2)
+                }.toolbar(showsSidebar ? .hidden : .visible, for: .tabBar)
+                    .background(WorkspaceTabBarVisibility(hidden: showsSidebar))
+                    .environment(\.workspaceWidth, geometry.size.width - (showsSidebar ? 220 : 0))
+            }
+            .overlay(alignment: .topLeading) {
+                if PlatformSupport.isMac && geometry.size.width >= 820 {
+                    Button { workspace.sidebarOverride = !showsSidebar } label: { Image(systemName: "sidebar.left") }
+                        .padding(8).accessibilityLabel("切换侧边栏")
+                }
+            }
         }.tint(Notebook.accent)
             .onOpenURL { url in
                 guard CountdownRoute(url: url) != nil else { return }
-                countdownNavigation.open(url); selection = 4
+                countdownNavigation.open(url); workspace.selection = 4
             }
-            .onChange(of: quickImport.pending?.id) { _, id in if id != nil { selection = 0 } }
-            .onAppear { if quickImport.pending != nil { selection = 0 }; countdownCoordinator.refresh(); environment.backups.start() }
+            .onChange(of: quickImport.pending?.id) { _, id in if id != nil { workspace.selection = 0 } }
+            .onChange(of: shortcutInbox.pending?.id) { _, id in if id != nil { workspace.selection = 0 } }
+            .onAppear { shortcutInbox.refresh(); if shortcutInbox.pending != nil { workspace.selection = 0 } }
+            .onAppear { if quickImport.pending != nil { workspace.selection = 0 }; countdownCoordinator.refresh(); environment.backups.start() }
             .onReceive(NotificationCenter.default.publisher(for: .shikeCloudPush)) { _ in countdownCoordinator.refresh() }
             .onReceive(NotificationCenter.default.publisher(for: .NSSystemTimeZoneDidChange)) { _ in countdownCoordinator.refresh() }
             .onReceive(NotificationCenter.default.publisher(for: .NSCalendarDayChanged)) { _ in countdownCoordinator.refresh() }
@@ -44,9 +65,9 @@ struct RootView: View {
                 if scenePhase == .active { countdownCoordinator.sync.refresh() }
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .active { environment.refresh(); countdownCoordinator.refresh(); environment.backups.schedule() }
-                if phase == .background && selection == 0 { controller.persistReportingError() }
-                if phase == .background { environment.backups.schedule(immediately: true) }
+                if phase == .active { environment.refresh(); countdownCoordinator.refresh(); environment.backups.schedule(); environment.backups.checkCloudBackup(); shortcutInbox.refresh() }
+                if (phase == .background || PlatformSupport.isMac && phase == .inactive) && selection == 0 { controller.persistReportingError() }
+                if phase == .background || PlatformSupport.isMac && phase == .inactive { environment.backups.schedule(immediately: true) }
             }
             .onChange(of: selection) { old, new in
                 if old == 0 { controller.persistReportingError() }
@@ -61,15 +82,25 @@ struct RootView: View {
 }
 
 struct HomeView: View {
+    @Environment(\.workspaceWidth) private var workspaceWidth
+    @EnvironmentObject private var workspace: Workspace
+    @State private var showFiles = false
+    @State private var dropTargeted = false
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
     @StateObject private var quickImport = QuickImportRouter.shared
+    @StateObject private var shortcutInbox = ShortcutInbox.shared
     @State private var quickImportError: String?
     @State private var quickImportFailed = false
     @ScaledMetric(relativeTo: .body) private var importHeight: CGFloat = 50
     @ObservedObject var controller: ImportController
     @State private var photos: [PhotosPickerItem] = []
     @State private var showCamera = false
+    @StateObject private var voice = VoiceRecorder()
+    @State private var voiceTask: Task<Void, Never>?
+    @State private var voiceOriginalText = ""
+    @State private var voiceSessionID: UUID?
+    private var inputBusy: Bool { isLoadingInput || voice.busy }
     @State private var isLoadingInput = false
     @State private var importTask: Task<Void, Never>?
     @State private var showShareFixture = false
@@ -90,9 +121,15 @@ struct HomeView: View {
 
                     importLayout {
                         importTile {
-                            PasteImportButton { providers in
-                                loadProviders(providers)
-                            }.frame(height: importHeight)
+                            if PlatformSupport.isMac {
+                                Button { loadProviders(UIPasteboard.general.itemProviders) } label: {
+                                    Label("粘贴", systemImage: "doc.on.clipboard").frame(maxWidth: .infinity, minHeight: importHeight)
+                                }.accessibilityIdentifier("pasteImport")
+                            } else {
+                                PasteImportButton { providers in
+                                    loadProviders(providers)
+                                }.frame(height: importHeight)
+                            }
                         }
                         importTile {
                             PhotosPicker(selection: $photos, maxSelectionCount: 5, matching: .images) {
@@ -100,29 +137,52 @@ struct HomeView: View {
                             }.accessibilityIdentifier("choosePhotos")
                         }
                         importTile {
-                            Button { Task { await openCamera() } } label: {
-                                Label("拍照", systemImage: "camera").frame(maxWidth: .infinity, minHeight: importHeight)
-                            }.accessibilityIdentifier("takePhoto")
+                            if PlatformSupport.isMac {
+                                Button { showFiles = true } label: {
+                                    Label("文件", systemImage: "folder").frame(maxWidth: .infinity, minHeight: importHeight)
+                                }.accessibilityIdentifier("chooseFiles")
+                            } else {
+                                Button { Task { await openCamera() } } label: {
+                                    Label("拍照", systemImage: "camera").frame(maxWidth: .infinity, minHeight: importHeight)
+                                }.accessibilityIdentifier("takePhoto")
+                            }
                         }
-                    }.font(.subheadline.weight(.medium)).disabled(controller.isBusy || isLoadingInput)
+                    }.font(.subheadline.weight(.medium)).disabled(controller.isBusy || inputBusy)
 
                     if isLoadingInput {
                         HStack { ProgressView("正在读取素材…"); Spacer(); Button("取消") { importTask?.cancel() } }
                     }
                     if let quickImportError { NoteMessage(text: quickImportError, isError: quickImportFailed) }
+                    if let error = shortcutInbox.error { NoteMessage(text: error, isError: true) }
+                    if let error = voice.error { NoteMessage(text: error, isError: true) }
 
                     ImportFlowView(controller: controller, calendars: controller.environment.calendars,
-                                   showsAPIProfilePicker: true, isLoadingInput: isLoadingInput)
-                    if controller.session.text.isEmpty && controller.session.drafts.isEmpty {
-                        HStack(alignment: .top, spacing: 10) {
-                            Image(systemName: "square.and.arrow.up")
-                            Text("也可以从其他 App 的分享菜单找到「拾刻计划」，直接整理成日程。")
-                        }.font(.footnote).foregroundStyle(Notebook.secondaryInk).padding(.horizontal, 8)
-                    }
-                }.padding(.horizontal, 22).padding(.bottom, 32).frame(maxWidth: 680)
+                                   showsAPIProfilePicker: true, isLoadingInput: inputBusy,
+                                   onVoiceInput: toggleVoiceInput, voiceRecording: voice.recording,
+                                   voicePreparing: voice.preparing, voiceFinishing: voice.finishing,
+                                   voiceInputEnabled: !controller.isBusy && !isLoadingInput && controller.session.savedCount == 0)
+                }.padding(.horizontal, 22).padding(.bottom, 32).frame(maxWidth: workspaceWidth >= 880 ? 1200 : 680)
                     .frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively)
         }.foregroundStyle(Notebook.ink)
+            .overlay { if dropTargeted { RoundedRectangle(cornerRadius: 20).strokeBorder(Notebook.accent, style: StrokeStyle(lineWidth: 3, dash: [8])).padding(8).allowsHitTesting(false) } }
+            .onDrop(of: [.fileURL, .image, .plainText], isTargeted: $dropTargeted) { providers in
+                guard !controller.isBusy, !inputBusy else { return false }
+                loadProviders(providers, source: "拖入素材"); return true
+            }
+            .fileImporter(isPresented: $showFiles, allowedContentTypes: [.image, .plainText], allowsMultipleSelection: true) { result in
+                switch result {
+                case .success(let urls): loadFiles(urls)
+                case .failure(let error): controller.errorMessage = error.localizedDescription
+                }
+            }
+            .task(id: workspace.pending?.id) {
+                while workspace.pending?.section == 0 && !Task.isCancelled {
+                    processWorkspaceAction()
+                    if workspace.pending == nil { break }
+                    do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+                }
+            }
             .task(id: quickImport.pending?.id) {
                 while quickImport.pending != nil && !Task.isCancelled {
                     processQuickImport()
@@ -130,8 +190,30 @@ struct HomeView: View {
                     do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
                 }
             }
-            .onChange(of: scenePhase) { _, phase in if phase == .active { processQuickImport() } }
-            .onChange(of: controller.isBusy) { _, busy in if !busy { processQuickImport() } }
+            .task(id: "\(shortcutInbox.pending?.id.uuidString ?? "")|\(scenePhase == .active)") {
+                while scenePhase == .active && shortcutInbox.pending != nil && !Task.isCancelled {
+                    if processShortcutInput() { break }
+                    do { try await Task.sleep(for: .milliseconds(350)) } catch { return }
+                }
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active { processQuickImport() }
+                else if phase == .background { voiceTask?.cancel(); applyVoiceTranscript(); voice.cancel(); voiceSessionID = nil }
+                else if voice.recording { voice.stop() }
+            }
+            .onChange(of: voice.text) { _, _ in applyVoiceTranscript() }
+            .onChange(of: voice.busy) { _, busy in
+                if !busy {
+                    applyVoiceTranscript(); controller.persistReportingError()
+                    voiceSessionID = nil
+                    processQuickImport(); processWorkspaceAction()
+                }
+            }
+            .onDisappear { voiceTask?.cancel(); applyVoiceTranscript(); voice.cancel(); voiceSessionID = nil }
+            .onChange(of: controller.session.id) { _, id in
+                if let voiceSessionID, voiceSessionID != id { voiceTask?.cancel(); voice.cancel(); self.voiceSessionID = nil }
+            }
+            .onChange(of: controller.isBusy) { _, busy in if !busy { processQuickImport(); processWorkspaceAction() } }
             .onChange(of: controller.showsPlanning) { _, showing in if !showing { processQuickImport() } }
             .onAppear { processQuickImport() }
             .navigationTitle("拾刻计划").navigationBarTitleDisplayMode(.inline)
@@ -145,7 +227,7 @@ struct HomeView: View {
                 #endif
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { controller.startNew() } label: { Image(systemName: "plus") }
-                        .accessibilityLabel("新建导入").disabled(controller.isBusy || isLoadingInput)
+                        .accessibilityLabel("新建导入").disabled(controller.isBusy || inputBusy)
                 }
             }
             .sheet(isPresented: $showCamera) {
@@ -193,13 +275,27 @@ struct HomeView: View {
         dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
     }
 
+    private func toggleVoiceInput() {
+        if voice.recording { voice.stop(); return }
+        guard !voice.busy, !controller.isBusy, !isLoadingInput, controller.session.savedCount == 0 else { return }
+        voiceOriginalText = controller.session.text
+        voiceSessionID = controller.session.id
+        voiceTask = Task { await voice.start() }
+    }
+
+    private func applyVoiceTranscript() {
+        guard voiceSessionID == controller.session.id, !voice.text.isEmpty else { return }
+        controller.session.text = voiceOriginalText + (voiceOriginalText.isEmpty ? "" : "\n\n") + voice.text
+        controller.session.source = "语音录入"
+    }
+
     private func importTile<Content: View>(@ViewBuilder content: () -> Content) -> some View {
         content().frame(maxWidth: .infinity).background(Notebook.paper)
             .overlay(PencilBorder().stroke(Notebook.ink.opacity(0.30), lineWidth: 1.1))
     }
 
     private func processQuickImport() {
-        guard scenePhase == .active, !controller.isBusy, !isLoadingInput, !controller.showsPlanning,
+        guard scenePhase == .active, !controller.isBusy, !inputBusy, !controller.showsPlanning,
               controller.review == nil, controller.consentRequest == nil, let request = quickImport.pending else { return }
         // Existing sheets retain uncommitted edits; defer until the home page is visible again.
         if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
@@ -233,14 +329,64 @@ struct HomeView: View {
         }
     }
 
-    private func loadProviders(_ providers: [NSItemProvider]) {
+    /// Persist before acknowledging. Replaying a request after a crash uses the same session ID.
+    private func processShortcutInput() -> Bool {
+        guard scenePhase == .active, !controller.isBusy, !inputBusy, !controller.showsPlanning,
+              controller.review == nil, controller.consentRequest == nil, let request = shortcutInbox.pending else { return false }
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           scene.windows.first(where: \.isKeyWindow)?.rootViewController?.presentedViewController != nil { return false }
+        do {
+            try controller.persist()
+            let previous = try controller.environment.store?.all().first { $0.id == request.id }
+            var session = previous ?? ImportSession(source: request.source)
+            session.id = request.id
+            if previous == nil { session.text = request.text; session.createdAt = request.createdAt }
+            controller.session = session
+            try controller.persist()
+            try shortcutInbox.consume(request.id)
+            if !session.hasParsed { controller.parse() }
+        } catch { controller.errorMessage = "捷径导入失败，内容仍已保留：" + error.localizedDescription }
+        return true
+    }
+
+    private func loadProviders(_ providers: [NSItemProvider], source: String = "剪贴板") {
+        guard !controller.isBusy, !inputBusy else { return }
         isLoadingInput = true
         importTask = Task {
             defer { isLoadingInput = false }
             do {
                 let (text, images) = try await ItemLoader.load(providers)
-                if images.isEmpty { controller.appendText(text, source: "剪贴板") }
-                else { controller.importImageFiles(images, source: "剪贴板", appendedText: text) }
+                if images.isEmpty { controller.appendText(text, source: source) }
+                else { controller.importImageFiles(images, source: source, appendedText: text) }
+            } catch { controller.errorMessage = error.localizedDescription }
+        }
+    }
+
+    private func processWorkspaceAction() {
+        guard let request = workspace.pending, request.section == 0, workspace.selection == 0,
+              !controller.isBusy, !inputBusy, !controller.showsPlanning,
+              controller.review == nil, controller.consentRequest == nil else { return }
+        // A command must never replace an editor presented above the workspace.
+        if let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+           scene.windows.first(where: \.isKeyWindow)?.rootViewController?.presentedViewController != nil { return }
+        workspace.consume(request.id)
+        switch request.action {
+        case .new: controller.startNew()
+        case .files: showFiles = true
+        case .paste: loadProviders(UIPasteboard.general.itemProviders)
+        case .search: break
+        }
+    }
+
+    private func loadFiles(_ urls: [URL]) {
+        guard !controller.isBusy, !inputBusy else { return }
+        isLoadingInput = true
+        importTask = Task {
+            defer { isLoadingInput = false }
+            do {
+                let (text, images) = try await ItemLoader.loadFiles(urls)
+                if images.isEmpty { controller.appendText(text, source: "文件") }
+                else { controller.importImageFiles(images, source: "文件", appendedText: text) }
             } catch { controller.errorMessage = error.localizedDescription }
         }
     }

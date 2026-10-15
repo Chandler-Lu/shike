@@ -130,6 +130,38 @@ import ShikeCore
         record.updatedAt = .now; record.revision = UUID(); record.deleted = true; record.countdown = nil; record.category = nil
         try put(record)
     }
+
+    /// Apply a batch in one write and one notification, preserving sync tombstones.
+    func deleteEntries(_ ids: Set<UUID>) throws {
+        try updateEntries(ids) { record in
+            record.deleted = true
+            record.countdown = nil
+        }
+    }
+
+    func moveEntries(_ ids: Set<UUID>, to categoryID: UUID?) throws {
+        if let categoryID, !categories.contains(where: { $0.id == categoryID }) {
+            throw ShikeError.message("这个分组已被删除，请重新选择。")
+        }
+        try updateEntries(ids) { record in record.countdown?.categoryID = categoryID }
+    }
+
+    private func updateEntries(_ ids: Set<UUID>, change: (inout CountdownRecord) -> Void) throws {
+        guard !ids.isEmpty else { return }
+        guard ids.isSubset(of: Set(entries.map(\.id))) else {
+            throw ShikeError.message("所选日子已发生变化，请重新选择。")
+        }
+        var value = document
+        let now = Date.now
+        for index in value.records.indices where ids.contains(value.records[index].id) {
+            change(&value.records[index])
+            value.records[index].updatedAt = now
+            value.records[index].revision = UUID()
+            try value.records[index].validate()
+        }
+        value.pending.formUnion(ids)
+        try commit(value)
+    }
     /// The binding is never silently reassigned, so another Apple account cannot receive old data.
     func bindAccount(_ id: String) throws {
         guard document.accountID == nil || document.accountID == id else {

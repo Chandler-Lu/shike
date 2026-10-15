@@ -19,11 +19,13 @@ struct CalendarChoice: Identifiable {
     @Published private(set) var authorized = false
     private var observer: NSObjectProtocol?
     private var demoEvents: [String: EventDraft] = [:]
+    private var movedDemoEvents: [String: CalendarEventSnapshot] = [:]
+    private var queriedDemoEvents: [String: CalendarEventSnapshot] = [:]
     private let useDemo: Bool
     private let reader = CalendarQueryWorker()
     private var fixtureEvents: [CalendarEventSnapshot]
 
-    init(useDemo: Bool = AppIdentity.isUITesting, fixtureEvents: [CalendarEventSnapshot] = []) {
+    init(useDemo: Bool = AppIdentity.usesDemoCalendar, fixtureEvents: [CalendarEventSnapshot] = []) {
         self.useDemo = useDemo
         self.fixtureEvents = fixtureEvents
         refresh()
@@ -107,10 +109,22 @@ struct CalendarChoice: Identifiable {
             guard !event.hasRecurrenceRules else { throw ShikeError.message("这个日程已在系统日历中改为重复事件，请在系统日历中修改。") }
         } else { event = EKEvent(eventStore: store) }
         event.title = draft.title.trimmingCharacters(in: .whitespacesAndNewlines)
-        event.startDate = draft.start
-        event.endDate = draft.end
+        // Setting a non-nil time zone after isAllDay clears EventKit's all-day
+        // flag. All-day events are floating civil dates in the system zone.
+        // Clear the old flag before assigning exclusive end dates as well;
+        // otherwise an existing all-day event gains an extra day when updated.
+        event.isAllDay = false
+        event.timeZone = draft.isAllDay ? nil : draft.timeZone
+        if draft.isAllDay {
+            var source = Calendar(identifier: .gregorian); source.timeZone = draft.timeZone
+            var system = Calendar(identifier: .gregorian); system.timeZone = .current
+            event.startDate = draft.start.flatMap { system.date(from: source.dateComponents([.year, .month, .day], from: $0)) }
+            event.endDate = draft.end.flatMap { system.date(from: source.dateComponents([.year, .month, .day], from: $0)) }
+        } else {
+            event.startDate = draft.start
+            event.endDate = draft.end
+        }
         event.isAllDay = draft.isAllDay
-        event.timeZone = draft.timeZone
         event.notes = draft.notes
         event.location = draft.location
         event.calendar = calendar
@@ -132,7 +146,13 @@ struct CalendarChoice: Identifiable {
         current.title = event.title ?? ""
         current.start = event.startDate; current.end = event.endDate
         current.isAllDay = event.isAllDay
-        current.timeZoneIdentifier = event.timeZone?.identifier ?? draft.timeZoneIdentifier
+        if event.isAllDay {
+            let snapshot = CalendarEventSnapshot(eventID: event.eventIdentifier, itemID: event.calendarItemIdentifier,
+                calendarID: event.calendar.calendarIdentifier, title: current.title, start: event.startDate, end: event.endDate,
+                allDay: true, timeZone: event.timeZone?.identifier ?? TimeZone.current.identifier)
+            let civilInterval = snapshot.interval(in: draft.timeZone)
+            current.start = civilInterval.start; current.end = civilInterval.end
+        } else { current.timeZoneIdentifier = event.timeZone?.identifier ?? draft.timeZoneIdentifier }
         current.location = event.location ?? ""; current.notes = event.notes ?? ""
         current.calendarID = event.calendar.calendarIdentifier
         current.eventIdentifier = event.eventIdentifier
@@ -171,6 +191,14 @@ struct CalendarChoice: Identifiable {
                     let start = Calendar.current.date(byAdding: .day, value: index, to: day)!.addingTimeInterval(3600 * 10)
                     return CalendarEventSnapshot(eventID: "demo-\(index)", itemID: "demo-\(index)", calendarID: index == 2 ? "test-readonly" : "test-work", title: ["产品设计评审", "读书与笔记", "朋友的展览"][index % 3], start: start, end: start.addingTimeInterval(5400))
                 }
+                if ProcessInfo.processInfo.arguments.contains("-calendar-all-day-fixture") {
+                    fixtures += (0..<4).map { index in
+                        let start = Calendar.current.date(byAdding: .day, value: index == 0 ? -1 : 0, to: day)!
+                        let end = Calendar.current.date(byAdding: .day, value: index == 0 ? 2 : 1, to: day)!
+                        return CalendarEventSnapshot(eventID: "all-day-\(index)", itemID: "all-day-\(index)", calendarID: "test-work",
+                                                     title: ["跨天出行", "全天会议", "休假", "第四条全天日程"][index], start: start, end: end, allDay: true)
+                    }
+                }
             }
             #endif
             events = fixtures + demoEvents.values.compactMap { draft in
@@ -180,8 +208,34 @@ struct CalendarChoice: Identifiable {
         } else { events = try await reader.events(in: interval, ids: ids) }
         try Task.checkCancellation()
         guard authorized else { throw ShikeError.message("日历访问已关闭。") }
-        return events.filter { ids.contains($0.calendarID) && Scheduling.overlaps($0.interval, interval) }
+        let current = useDemo ? events.map { movedDemoEvents[$0.eventID] ?? $0 } : events
+        if useDemo { for event in current { queriedDemoEvents[event.eventID] = event } }
+        return current.filter { ids.contains($0.calendarID) && Scheduling.overlaps($0.interval, interval) }
             .sorted { ($0.start, $0.id) < ($1.start, $1.id) }
+    }
+
+    /// Only change the selected occurrence's dates. Preserve alarms, attendees, notes and recurrence.
+    func reschedule(_ snapshot: CalendarEventSnapshot, to interval: DateInterval) throws {
+        guard authorized, calendars.contains(where: { $0.id == snapshot.calendarID }) else {
+            throw ShikeError.message("这个日历只支持查看，或日历访问权限已关闭。")
+        }
+        guard interval.duration > 0 else { throw ShikeError.message("结束时间必须晚于开始时间。") }
+        if useDemo {
+            guard var current = queriedDemoEvents[snapshot.eventID] ?? fixtureEvents.first(where: { $0.eventID == snapshot.eventID }),
+                  current.start == snapshot.start, current.end == snapshot.end else {
+                throw ShikeError.message("这个事件已被移动或删除，请刷新日历。")
+            }
+            current.start = interval.start; current.end = interval.end
+            movedDemoEvents[snapshot.eventID] = current; queriedDemoEvents[snapshot.eventID] = current
+        } else {
+            let event = try editableEvent(snapshot)
+            guard event.endDate == snapshot.end, event.isAllDay == snapshot.allDay else {
+                throw ShikeError.message("这个事件刚刚被修改，请刷新后再拖动。")
+            }
+            event.startDate = interval.start; event.endDate = interval.end
+            try store.save(event, span: .thisEvent, commit: true)
+        }
+        revision = UUID()
     }
 
     /// Resolve this occurrence in the editing store; never use an EKEvent from the background store.

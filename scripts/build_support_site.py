@@ -20,9 +20,9 @@ def page(title, body, path):
     html = f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="description" content="{escape(title)} · Chandler-Lu"><title>{escape(title)} · 拾刻计划</title><style>{STYLE}</style></head>
-<body><main><nav aria-label="导航"><a href="../support/">帮助与支持</a><a href="../privacy/">隐私政策</a><a href="https://www.yeslu.cn">作者主页</a></nav>
+<body><main><nav aria-label="导航"><a href="https://github.com/Chandler-Lu/shike/issues">帮助与支持</a><a href="https://github.com/Chandler-Lu/shike/blob/main/PRIVACY.md">隐私政策</a><a href="https://www.yeslu.cn">作者主页</a></nav>
 {body}
-<footer>© 2026 Chandler-Lu · <a href="mailto:trlu1997@outlook.com">trlu1997@outlook.com</a></footer></main></body></html>
+<footer>© 2026 Chandler-Lu · <a href="mailto:shike@yeslu.cn">shike@yeslu.cn</a></footer></main></body></html>
 '''
     path.write_text(html)
 
@@ -55,7 +55,7 @@ support = '''<h1>拾刻计划支持</h1>
 <h2>日子与备份</h2><p>正数日与倒数日支持公历、农历、每周/月/年重复、分组、置顶和本地提醒。列表可选单列、双列或窄条，下拉搜索、深拉新增。支持包含起始日、秒级计时、周年与整数日提醒，也能一次用自然语言识别多个日子，核对后保存，或导出竖版分享卡片；无需日历权限也能在拾刻计划日历里显示，不会自动写入系统日历。设置中的统一 iCloud 开关同时控制倒数日同步。设置下方可导出 UTF-8 JSON，包含原文、问答和普通设置，不含 API Key；请自行保管。支持预览并恢复拾刻计划 JSON 备份，按编号合并且保留本机已有内容，历史日程不会自动再次写入系统日历。自动备份可同时保存到本地和 iCloud Drive，各保留最近 30 份。Days Matter 加密备份暂不支持。</p>
 <h2>小组件与 Apple Watch</h2><p>桌面提供小、中、大尺寸日子小组件，正数日和倒数日均可显示：小号一主一辅，中、大号分为“值得期待”和“已经走过”，配有日期、置顶标记和年度进度。点一个日子可打开详情。手表提供日子列表、详情与智能叠放。可选择全部或指定分组，各自记住选择。手表通过配对 iPhone 更新，离线可查看已有缓存。打开手机 App 后仍未更新时，请确认蓝牙连接、配对状态和手表上的拾刻计划已安装。</p><h2>iCloud 设置没有同步</h2><p>两台设备使用同一 Apple 账户，开启 iCloud Drive 及“密码和钥匙串”，并在拾刻计划中开启同步。设置和 Key 可能分开到达，可稍后检查同步。关闭开关仅停止当前设备的同步。日程原文、图片和记录不通过此设置同步，系统日历有自己的账户同步机制。</p>
 <h2>删除记录或撤销授权</h2><p>在“记录”中删除导入记录不会删除系统日历事件；可在日历页的系统编辑器或系统日历中另行删除。设置 → 关于内容与隐私 → 撤销模型发送授权，会让下一次提取重新询问，但无法撤回已发送内容。需要停用 API Key 时，请到服务提供方撤销。更多保存与删除细节请阅读隐私政策。</p>
-<h2>联系我们</h2><p><a href="mailto:trlu1997@outlook.com?subject=Shike%20Support">发送邮件至 trlu1997@outlook.com</a>。请说明应用版本、iOS 版本、操作步骤及错误提示；可附已脱敏截图。不要发送 API Key、私人日程或他人的个人信息。</p>
+<h2>联系我们</h2><p><a href="mailto:shike@yeslu.cn?subject=Shike%20Support">发送邮件至 shike@yeslu.cn</a>。请说明应用版本、iOS 版本、操作步骤及错误提示；可附已脱敏截图。不要发送 API Key、私人日程或他人的个人信息。</p>
 '''
 page('拾刻计划支持', support, OUT / 'support/index.html')
 print('Generated privacy and support pages in docs/app-store/site/shike/')

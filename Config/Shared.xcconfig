@@ -6,6 +6,8 @@ DEVELOPMENT_TEAM =
 CODE_SIGN_STYLE = Automatic
 IPHONEOS_DEPLOYMENT_TARGET = 17.0
 SWIFT_VERSION = 5.0
+// If changing the container, also update the literal NSUbiquitousContainers key
+// in App-Info.plist and increase CURRENT_PROJECT_VERSION to refresh Drive metadata.
 SHIKE_CLOUD_CONTAINER = iCloud.com.chandler.shike
 SHIKE_CLOUD_ENVIRONMENT = Development
 APS_ENVIRONMENT = development

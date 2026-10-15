@@ -51,6 +51,7 @@ struct DraftReview {
     private var conflictAcknowledgements: [UUID: String] = [:]
     private var conflictSnapshot: [CalendarEventSnapshot] = []
     private var operation: Task<Void, Never>?
+    private var modelRequestID = UUID()
     private var persistence: Task<Void, Never>?
     var isBusy: Bool { busyMessage != nil }
 
@@ -210,6 +211,17 @@ struct DraftReview {
         }
     }
 
+    private func modelObserver() -> LLMObserver {
+        let id = UUID(); modelRequestID = id
+        return { [weak self] update in
+            guard case .progress(let progress) = update else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.modelRequestID == id, self.isBusy else { return }
+                self.busyMessage = progress.message
+            }
+        }
+    }
+
     private func requestExtraction() async throws -> [EventDraft] {
         let preferences = environment.preferences
         let profile = preferences.activeProfile
@@ -229,7 +241,7 @@ struct DraftReview {
                                      timeZone: TimeZone(identifier: session.referenceTimeZone) ?? .current,
                                      configuration: configuration, apiKey: apiKey,
                                      calendars: candidates,
-                                     forcedCategory: session.forcedCategory, prompts: preferences.promptSettings)
+                                     forcedCategory: session.forcedCategory, prompts: preferences.promptSettings, observer: modelObserver())
         return drafts.map { draft in
             var draft = draft
             draft.suggestedCalendarID = draft.suggestedCalendarID.flatMap { identifiers[$0] }
@@ -269,6 +281,7 @@ struct DraftReview {
     }
 
     func cancel() {
+        modelRequestID = UUID()
         operation?.cancel()
         information = "已取消，已识别的文字已保留。"
     }
@@ -549,12 +562,12 @@ extension ImportController {
                 } else {
                     reply = try await environment.llmClient.plan(conversation: conversation, drafts: session.drafts, timeZone: zone,
                         referenceDate: now, available: free, configuration: configuration, apiKey: profile.map { try preferences.profileKey($0) } ?? "",
-                        calendars: candidates, forcedCategory: session.forcedCategory, prompts: preferences.promptSettings)
+                        calendars: candidates, forcedCategory: session.forcedCategory, prompts: preferences.promptSettings, observer: modelObserver())
                 }
                 #else
                 reply = try await environment.llmClient.plan(conversation: conversation, drafts: session.drafts, timeZone: zone,
                     referenceDate: now, available: free, configuration: configuration, apiKey: profile.map { try preferences.profileKey($0) } ?? "",
-                    calendars: candidates, forcedCategory: session.forcedCategory, prompts: preferences.promptSettings)
+                    calendars: candidates, forcedCategory: session.forcedCategory, prompts: preferences.promptSettings, observer: modelObserver())
                 #endif
                 try Task.checkCancellation()
                 var updated = session

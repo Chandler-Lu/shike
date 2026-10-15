@@ -67,6 +67,32 @@ struct InkButtonStyle: ButtonStyle {
     }
 }
 
+/// Keep tap and hold mutually exclusive. Do not attach GestureState to only the
+/// first gesture: resetting it on release can cancel the pending tap gesture.
+struct HoldActionButtonStyle: PrimitiveButtonStyle {
+    @Environment(\.isEnabled) private var isEnabled
+    let holdLabel: String
+    var onHold: () -> Void
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .accessibilityElement(children: .combine)
+            .contentShape(Rectangle())
+            .gesture(LongPressGesture(minimumDuration: 0.55, maximumDistance: 12)
+                .exclusively(before: TapGesture())
+                .onEnded { value in
+                    guard isEnabled else { return }
+                    switch value {
+                    case .first(true): onHold()
+                    case .second: configuration.trigger()
+                    default: break
+                    }
+                })
+            .accessibilityAction { if isEnabled { configuration.trigger() } }
+            .accessibilityAction(named: Text(holdLabel)) { if isEnabled { onHold() } }
+    }
+}
+
 /// Keep the gesture outside the text view so double-tapping a word still selects it.
 struct ExpandTextEditorControl: View {
     @Binding var text: String

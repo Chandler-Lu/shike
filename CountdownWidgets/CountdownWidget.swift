@@ -6,9 +6,11 @@ import WidgetKit
     var body: some WidgetConfiguration {
         AppIntentConfiguration(kind: "ShikeCountdowns", intent: CountdownWidgetIntent.self, provider: CountdownWidgetProvider()) { CountdownWidgetView(entry: $0) }
             .configurationDisplayName("拾刻计划倒数日")
-            .description("值得期待，也值得记住。按分组查看倒数日与正数日。")
+            .description("值得期待，也值得记住。按分组自动选择，或指定一到两个正数日、倒数日。")
             #if os(watchOS)
             .supportedFamilies([.accessoryRectangular])
+            #elseif os(iOS) && !targetEnvironment(macCatalyst)
+            .supportedFamilies([.systemSmall, .systemMedium, .systemLarge, .accessoryInline, .accessoryCircular, .accessoryRectangular])
             #else
             .supportedFamilies([.systemSmall, .systemMedium, .systemLarge])
             #endif

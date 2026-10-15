@@ -71,6 +71,13 @@ struct DataExportView: View {
                         Text("数据变化后、打开或离开 App 时检查备份。每台设备保留最近 30 份本地与云端副本；文件保存在 iCloud Drive → 拾刻计划 → Backups。")
                             .font(.caption).foregroundStyle(Notebook.secondaryInk)
                         Text(backups.status).font(.caption).foregroundStyle(Notebook.secondaryInk)
+                        if backups.cloudEnabled {
+                            Text(backups.cloudStatus).font(.caption).foregroundStyle(Notebook.secondaryInk)
+                                .accessibilityIdentifier("cloudBackupStatus")
+                            Button(backups.cloudBusy ? "正在检查…" : "检查云端备份") { backups.checkCloudBackup() }
+                                .frame(minHeight: 44).disabled(backups.cloudBusy)
+                                .accessibilityIdentifier("checkCloudBackup")
+                        }
                         Button(backups.busy ? "正在备份…" : "立即备份") {
                             Task {
                                 do { _ = try await backups.create(); failed = false; message = "本地备份已保存。" }
@@ -83,6 +90,7 @@ struct DataExportView: View {
                 if let message { NoteMessage(text: message, isError: failed) }
             }
         }
+        .task { backups.checkCloudBackup() }
         .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
             do { try prepare(try result.get()) }
             catch { failed = true; message = error.localizedDescription }

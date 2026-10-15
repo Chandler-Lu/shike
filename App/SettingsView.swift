@@ -14,6 +14,7 @@ struct SettingsView: View {
     @State private var calendarMessage: String?
     @State private var syncError: String?
     @State private var consentMessage: String?
+    @State private var showShortcutGuide = false
 
     init(environment: AppEnvironment, countdownSync: CountdownSync) {
         self.countdownSync = countdownSync
@@ -51,11 +52,14 @@ struct SettingsView: View {
                     cloudSettings
                     DataExportView(environment: environment)
 
+                    usageTips
+
                     DisclosureGroup {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("图片在设备上识别。经你允许后，将原文、参考日期、时区和指定类别发送到你配置的模型服务，安排时另经授权发送问答与可用时段；已有事件的标题、地点、备注和原图不会发送。")
+                            Text("图片在设备上识别。经你允许后，将原文、参考日期、时区和指定类别发送到你配置的模型服务，安排时另经授权发送问答与可用时段。点击日历页“总结”会直接发送当前显示日程的标题、时间与地点，不发送备注、账户或内部标识。原图不上传。")
                             Text("开启自动选择日历后，会将可写日历名称交给模型匹配，不发送已有日历事件。手动指定的类别和日历优先。开启 iCloud 后，设置、日历名称和倒数日会在你的设备间同步。")
                             Text("草稿与导入记录保存在本机；开启云端备份后，JSON 副本会保存到 iCloud Drive。系统日历的同步由你配置的日历账户负责。")
+                            Text("语音由系统转写，优先在设备上识别，不保存录音。")
                             NavigationLink("隐私政策") { LegalDocumentView() }.frame(minHeight: 44).accessibilityIdentifier("privacyPolicy")
                             NavigationLink("字体许可") { LegalDocumentView(showsFontLicense: true) }.frame(minHeight: 44)
                             Link("帮助与支持", destination: AppLegal.supportURL).frame(minHeight: 44)
@@ -81,8 +85,33 @@ struct SettingsView: View {
             .sheet(item: $editingPrompt) { purpose in
                 PromptEditorView(preferences: preferences, purpose: purpose)
             }
+            .sheet(isPresented: $showShortcutGuide) { ShortcutGuideView().workspaceSheet() }
             .onAppear { preferences.updateCalendars(calendars.calendars) }
             .onChange(of: calendars.calendars.map(\.id)) { _, _ in preferences.updateCalendars(calendars.calendars) }
+    }
+
+    private var usageTips: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("从分享菜单导入", systemImage: "square.and.arrow.up").foregroundStyle(Notebook.ink)
+                    Text("在其他 App 中选中文字或图片，打开分享菜单，选择「拾刻计划」，就能整理成日程。若未显示，可在分享菜单的「更多」中启用。")
+                        .accessibilityIdentifier("sharingTip")
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("通过捷径识别当前页面", systemImage: "square.stack.3d.up").foregroundStyle(Notebook.ink)
+                    Text("在系统「快捷指令」中连接「截屏」和「识别图片并提取日程」，也可以导入剪贴板或听写文字。")
+                    Button("查看捷径设置方法") { showShortcutGuide = true }
+                        .frame(minHeight: 44).accessibilityIdentifier("shortcutGuide")
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("在输入框中说下安排", systemImage: "mic").foregroundStyle(Notebook.ink)
+                    Text("点击首页输入框右下角、放大按钮左侧的麦克风，即可开始录音，转写文字会直接追加到原文。再点一次停止，然后可以修改文字，选择「帮我安排」或「提取日程」。")
+                }
+            }.font(.subheadline).foregroundStyle(Notebook.secondaryInk).padding(.top, 12)
+        } label: {
+            Label("使用技巧", systemImage: "lightbulb").font(.subheadline)
+        }.padding(.horizontal, 8)
     }
 
     private var calendarSettings: some View {
@@ -347,6 +376,9 @@ private struct ModelAPISettingsView: View {
     @State private var key = ""
     @State private var loaded = false
     @State private var testing = false
+    @State private var testProgress: String?
+    @State private var diagnostics: LLMDiagnostics?
+    @State private var diagnosticsExpanded = false
     @State private var fetchingModels = false
     @State private var models: [APIModel] = []
     @State private var showModels = false
@@ -444,13 +476,34 @@ private struct ModelAPISettingsView: View {
             }.buttonStyle(InkButtonStyle()).disabled(isBusy).accessibilityIdentifier("saveAPI")
             Button {
                 inputFocused = false
-                if testing { invalidateRequest() } else { testConnection() }
+                if testing { operation?.cancel() } else { testConnection() }
             } label: {
                 HStack { if testing { ProgressView() }; Text(testing ? "取消测试" : "测试连接") }
             }.buttonStyle(InkButtonStyle(prominent: false)).disabled(fetchingModels).accessibilityIdentifier("testAPI")
             Text("测试连接会发送一条示例日程，可能产生少量调用费用。获取列表不会发送日程内容。")
                 .font(.caption).foregroundStyle(Notebook.secondaryInk)
+            if testing, let testProgress { Text(testProgress).font(.caption).foregroundStyle(Notebook.secondaryInk) }
             if let message { NoteMessage(text: message, isError: isError).accessibilityIdentifier("apiStatus") }
+            if let diagnostics {
+                VStack(alignment: .leading, spacing: 10) {
+                    Button { diagnosticsExpanded.toggle() } label: {
+                        HStack {
+                            Text("请求诊断")
+                            Spacer()
+                            Image(systemName: diagnosticsExpanded ? "chevron.down" : "chevron.right")
+                        }.frame(minHeight: 44).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityIdentifier("apiDiagnostics")
+                        .accessibilityValue(diagnosticsExpanded ? "已展开" : "已收起")
+                    if diagnosticsExpanded {
+                        Text(diagnostics.text).font(.caption).textSelection(.enabled)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Button { UIPasteboard.general.string = diagnostics.text } label: {
+                            Text("复制诊断").frame(maxWidth: .infinity, minHeight: 44, alignment: .leading).contentShape(Rectangle())
+                        }.buttonStyle(.plain).accessibilityIdentifier("copyAPIDiagnostics")
+                    }
+                }.font(.subheadline)
+            }
             if profileID != nil {
                 Button("删除此接口", role: .destructive) { confirmDelete = true }
                     .font(.subheadline).disabled(isBusy).accessibilityIdentifier("deleteAPIProfile")
@@ -517,7 +570,7 @@ private struct ModelAPISettingsView: View {
         requestID = UUID(); operation?.cancel(); testing = false; fetchingModels = false
     }
     private func invalidateModels() {
-        invalidateRequest(); models = []; showModels = false; message = nil
+        invalidateRequest(); models = []; showModels = false; message = nil; diagnostics = nil; testProgress = nil
     }
     private func fetchModels() {
         let id = UUID(); requestID = id
@@ -545,17 +598,34 @@ private struct ModelAPISettingsView: View {
     }
     private func testConnection() {
         let id = UUID(); requestID = id
-        testing = true; message = nil
-        let currentConfig = configuration; let currentKey = key
+        testing = true; message = nil; diagnostics = nil; diagnosticsExpanded = false; testProgress = "正在准备请求…"
+        var currentConfig = configuration; var currentKey = key
+        var client = LLMClient()
+        #if DEBUG
+        if AppIdentity.isUITesting && ProcessInfo.processInfo.arguments.contains("-api-stream-fixture") {
+            currentConfig = APIConfiguration(baseURL: "https://fixture.invalid/v1", model: "stream-fixture")
+            currentKey = "fixture-key"
+            let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [APIStreamUIFixture.self]
+            client = LLMClient(session: URLSession(configuration: config))
+        }
+        #endif
         operation = Task {
             defer { if requestID == id { testing = false } }
             do {
-                let events = try await LLMClient().extract(text: "2026年12月15日下午2点到3点，在线测试会议。", referenceDate: .now,
-                                                         timeZone: .current, configuration: currentConfig, apiKey: currentKey)
+                let events = try await client.extract(text: "2026年12月15日下午2点到3点，在线测试会议。", referenceDate: .now,
+                                                         timeZone: .current, configuration: currentConfig, apiKey: currentKey, observer: { update in
+                    Task { @MainActor in
+                        guard requestID == id else { return }
+                        switch update {
+                        case .progress(let progress): if testing { testProgress = progress.message }
+                        case .diagnostics(let report): diagnostics = report
+                        }
+                    }
+                })
                 guard !events.isEmpty else { throw ShikeError.message("接口已连接，但未能提取示例日程，请检查模型是否适合此任务。") }
                 guard requestID == id else { return }
                 message = "连接成功，模型已返回可读取的日程。"; isError = false
-            } catch is CancellationError { }
+            } catch is CancellationError { if requestID == id { message = "已取消测试。"; isError = false } }
             catch { if requestID == id { message = error.localizedDescription; isError = true } }
         }
     }
@@ -599,3 +669,29 @@ private struct ModelSelectionView: View {
         }.tint(Notebook.accent)
     }
 }
+
+#if DEBUG
+/// Exercises the real incremental transport in UI tests without contacting a provider.
+private final class APIStreamUIFixture: URLProtocol {
+    private var work: Task<Void, Never>?
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: ["Content-Type": "text/event-stream"])!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        work = Task {
+            do {
+                client?.urlProtocol(self, didLoad: Data(": heartbeat\n\n".utf8))
+                try await Task.sleep(for: .seconds(2))
+                let content = #"{"events":[{"title":"连接测试","start":"2026-12-15T14:00:00+08:00","end":"2026-12-15T15:00:00+08:00"}]}"#
+                let envelope = try JSONSerialization.data(withJSONObject: ["choices": [["delta": ["content": content], "finish_reason": "stop"]]])
+                var bytes = Data("data: ".utf8); bytes.append(envelope); bytes.append(Data("\n\ndata: [DONE]\n\n".utf8))
+                try Task.checkCancellation()
+                client?.urlProtocol(self, didLoad: bytes)
+                client?.urlProtocolDidFinishLoading(self)
+            } catch { }
+        }
+    }
+    override func stopLoading() { work?.cancel() }
+}
+#endif

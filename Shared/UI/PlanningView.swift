@@ -12,12 +12,16 @@ struct PlanningView: View {
     private var zone: TimeZone { TimeZone(identifier: controller.session.referenceTimeZone) ?? .current }
     private var calendar: Calendar { var value = Calendar(identifier: .gregorian); value.timeZone = zone; return value }
     var body: some View {
+        GeometryReader { geometry in
+        let wide = geometry.size.width >= 880
+        let columns = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 28)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
         NavigationStack {
             ZStack {
                 PaperBackground()
                 ScrollViewReader { scroll in
                     ScrollView {
-                        VStack(alignment: .leading, spacing: 20) {
+                        columns {
+                            VStack(alignment: .leading, spacing: 20) {
                             MarginTitle(title: "给想做的事，留点时间", subtitle: plan?.goal)
                             DisclosureGroup("安排范围与参考日历") {
                                 VStack(alignment: .leading, spacing: 14) {
@@ -100,8 +104,10 @@ struct PlanningView: View {
                                 Button("使用上一版方案") { controller.session.planning?.proposalNeedsUpdate = false; controller.errorMessage = nil }
                                     .font(.subheadline).disabled(controller.isBusy)
                             }
+                            }.frame(maxWidth: .infinity, alignment: .topLeading)
                             ImportFlowView(controller: controller, calendars: calendars, isPlanningContent: true)
-                        }.padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity)
+                                .frame(maxWidth: .infinity, alignment: .topLeading)
+                        }.padding(22).frame(maxWidth: wide ? 1200 : 680).frame(maxWidth: .infinity)
                     }.scrollDismissesKeyboard(.interactively)
                         .onChange(of: controller.session.planning?.turns.count) { _, _ in
                             if controller.session.planning?.hasProposal != true { withAnimation { scroll.scrollTo("answer", anchor: .bottom) } }
@@ -115,6 +121,7 @@ struct PlanningView: View {
                 }
                 .onDisappear { controller.persistReportingError() }
         }.tint(Notebook.accent)
+        }
     }
     private func setTimeZone(_ identifier: String) {
         guard let newZone = TimeZone(identifier: identifier) else { return }

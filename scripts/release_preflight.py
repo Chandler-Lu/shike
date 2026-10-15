@@ -53,8 +53,15 @@ def main():
         configs = objects[target['buildConfigurationList']]['buildConfigurations']
         for config in configs:
             item = objects[config]; settings = item['buildSettings']
-            expected_family = '4' if target['name'].startswith('ShikeWatch') else '1'
-            check(str(settings.get('TARGETED_DEVICE_FAMILY')) == expected_family, f"{target['name']} {item['name']}: expected device family {expected_family}")
+            if target['name'] == 'ShikeMacWidgets':
+                check(settings.get('SDKROOT') == 'macosx' and 'TARGETED_DEVICE_FAMILY' not in settings,
+                      f"{target['name']} {item['name']}: native macOS widget")
+            else:
+                expected_family = '4' if target['name'].startswith('ShikeWatch') else '1,2'
+                check(str(settings.get('TARGETED_DEVICE_FAMILY')) == expected_family, f"{target['name']} {item['name']}: expected device family {expected_family}")
+            if target['name'] in ('Shike', 'ShikeShare'):
+                check(settings.get('SUPPORTS_MACCATALYST') == 'YES' and settings.get('DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER') == 'NO',
+                      f"{target['name']} {item['name']}: Catalyst with existing identity")
             versions.add((str(settings['MARKETING_VERSION']), str(settings['CURRENT_PROJECT_VERSION'])))
             teams.add(settings.get('DEVELOPMENT_TEAM'))
         if target['name'] in ('Shike', 'ShikeShare'):
@@ -82,10 +89,27 @@ def main():
     share_entitlements = plist(ROOT / 'Config/Shike.entitlements')
     check(set(app_entitlements.get('com.apple.developer.icloud-services', [])) == {'CloudKit', 'CloudDocuments'}, 'Main app: CloudKit and iCloud Drive declared')
     check(app_entitlements.get('com.apple.developer.ubiquity-container-identifiers') == ['$(SHIKE_CLOUD_CONTAINER)'], 'Main app: iCloud Drive backup container')
+    cloud_container = re.search(r'^SHIKE_CLOUD_CONTAINER\s*=\s*(\S+)', (ROOT / 'Config/Shared.xcconfig').read_text(), re.M).group(1)
+    public_containers = plist(ROOT / 'Config/App-Info.plist').get('NSUbiquitousContainers', {})
+    public_metadata = public_containers.get(cloud_container, {})
+    check(not any('$(' in key for key in public_containers) and bool(public_metadata),
+          'iCloud Drive: public container uses literal identifier; Xcode does not expand dictionary keys')
+    check(public_metadata.get('NSUbiquitousContainerIsDocumentScopePublic') is True
+          and public_metadata.get('NSUbiquitousContainerSupportedFolderLevels') == 'Any'
+          and public_metadata.get('NSUbiquitousContainerName') == '拾刻计划',
+          'iCloud Drive: named public Documents folder supports nested backups')
     companion = plist(ROOT / 'Config/CountdownCompanion.entitlements')
     check(companion.get('com.apple.security.application-groups') == ['$(SHIKE_APP_GROUP)'], 'Companions: shared display data group')
     check('com.apple.developer.icloud-services' not in companion and 'keychain-access-groups' not in companion, 'Companions: no CloudKit or API key access')
-    check({'ShikeWidgets', 'ShikeWatch', 'ShikeWatchWidgets'} <= {t['name'] for t in targets}, 'Widget and Watch targets exist')
+    check({'ShikeWidgets', 'ShikeWatch', 'ShikeWatchWidgets', 'ShikeMacWidgets'} <= {t['name'] for t in targets}, 'iOS/Mac widgets and Watch targets exist')
+    for name in ('ShikeMac', 'ShikeMacShare', 'MacWidget'):
+        entitlements = plist(ROOT / f'Config/{name}.entitlements')
+        check(entitlements.get('com.apple.security.app-sandbox') is True, f'{name}: sandbox enabled')
+        check(entitlements.get('com.apple.security.application-groups') == companion['com.apple.security.application-groups'],
+              f'{name}: same shared App Group')
+    mac = plist(ROOT / 'Config/ShikeMac.entitlements')
+    for key in ('com.apple.developer.icloud-container-identifiers', 'com.apple.developer.ubiquity-kvstore-identifier', 'keychain-access-groups'):
+        check(mac.get(key) == app_entitlements.get(key), f'Mac keeps existing {key}')
     check(app_entitlements.get('com.apple.developer.icloud-container-identifiers') == ['$(SHIKE_CLOUD_CONTAINER)'], 'Main app: explicit CloudKit container')
     check(app_entitlements.get('aps-environment') == '$(APS_ENVIRONMENT)', 'Main app: APNs entitlement')
     check(app_entitlements.get('com.apple.developer.icloud-container-environment') == '$(SHIKE_CLOUD_ENVIRONMENT)', 'Main app: explicit CloudKit environment')
@@ -100,7 +124,12 @@ def main():
     check(set(manifest['NSPrivacyAccessedAPITypes'][0]['NSPrivacyAccessedAPITypeReasons']) == {'CA92.1', '1C8F.1'}, 'UserDefaults private and app-group required reasons')
     check(png_info(ROOT / 'App/Assets.xcassets/AppIcon.appiconset/AppIcon.png') == (1024, 1024, False), 'App icon: opaque 1024 x 1024')
 
-    metadata = json.loads((ROOT / 'docs/app-store/metadata/zh-Hans.json').read_text())
+    metadata_path = ROOT / 'docs/app-store/metadata/zh-Hans.json'
+    if not metadata_path.exists():
+        check(not args.submission and not args.archive, 'Private App Store materials absent; only source checks requested')
+        print(f'\n{len(errors)} failure(s)')
+        return 1 if errors else 0
+    metadata = json.loads(metadata_path.read_text())
     check(metadata['name'] == '拾刻计划', 'Store metadata uses the current product name')
     for target in targets:
         if target['name'] in ('Shike', 'ShikeShare', 'ShikeWidgets', 'ShikeWatch', 'ShikeWatchWidgets'):
@@ -141,7 +170,11 @@ def main():
             if not bundle.is_dir():
                 continue
             info = plist(bundle / 'Info.plist')
-            check(info.get('UIDeviceFamily') == ([4] if 'ShikeWatch' in bundle.name else [1]), f'{bundle.name}: expected device family')
+            if bundle == app:
+                public_metadata = info.get('NSUbiquitousContainers', {}).get(info.get('ShikeCloudContainer'), {})
+                check(public_metadata.get('NSUbiquitousContainerIsDocumentScopePublic') is True,
+                      'Archive: actual iCloud Drive container is published in processed Info.plist')
+            check(info.get('UIDeviceFamily') == ([4] if 'ShikeWatch' in bundle.name else [1, 2]), f'{bundle.name}: expected device family')
             check((info['CFBundleShortVersionString'], info['CFBundleVersion']) in versions, f'{bundle.name}: expected version/build')
             check(info.get('ITSAppUsesNonExemptEncryption') is False, f'{bundle.name}: encryption declaration')
             resources = ['PrivacyInfo.xcprivacy', 'OFL.txt', 'LXGWWenKai-Regular.ttf']
@@ -159,11 +192,12 @@ def main():
         ready = json.loads((ROOT / 'docs/app-store/readiness.json').read_text())
         for item in ready['manual_checks']:
             check(item['complete'] is True and bool(item.get('evidence', '').strip()), item['title'])
-        for key, phrase in [('privacy_url', metadata['name'] + '隐私政策'), ('support_url', metadata['name'] + '支持')]:
+        for key in ['privacy_url', 'support_url']:
             try:
                 with urllib.request.urlopen(metadata[key], timeout=15) as response:
                     content = response.read(1_000_000).decode('utf-8')
-                    check(response.status == 200 and phrase in content and 'trlu1997@outlook.com' in content, f'Published {key} is reachable and has expected content')
+                    expected = (metadata['name'] + '隐私政策' in content and 'shike@yeslu.cn' in content) if key == 'privacy_url' else ('Chandler-Lu/shike' in content and 'Issues' in content)
+                    check(response.status == 200 and expected, f'Published {key} is reachable and has expected content')
             except Exception as error:
                 check(False, f'Published {key}: {type(error).__name__}')
     print(f'\n{len(errors)} failed check(s). ' + ('Local preparation verified; this does not certify App Store acceptance.' if not errors else 'Resolve failures before the corresponding release step.'))

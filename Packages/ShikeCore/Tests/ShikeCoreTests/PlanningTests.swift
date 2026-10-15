@@ -27,6 +27,17 @@ final class PlanningTests: XCTestCase {
         var bad = plan; bad.end = bad.start.addingTimeInterval(31 * 86400)
         XCTAssertThrowsError(try bad.validate(timeZone: zone))
     }
+    func testAllDayIncludesItsFinalDayWhenEndIsNotMidnight() {
+        for (end, expectedEnd) in [
+            ("2026-10-14T23:59:59+08:00", "2026-10-15T00:00:00-04:00"),
+            ("2026-10-16T23:59:00+08:00", "2026-10-17T00:00:00-04:00"),
+            ("2026-10-15T00:00:00+08:00", "2026-10-15T00:00:00-04:00")
+        ] {
+            let event = CalendarEventSnapshot(eventID: "all", itemID: "all", calendarID: "c", title: "全天",
+                start: date("2026-10-14T00:00:00+08:00"), end: date(end), allDay: true, timeZone: "Asia/Shanghai")
+            XCTAssertEqual(event.interval(in: zone), DateInterval(start: date("2026-10-14T00:00:00-04:00"), end: date(expectedEnd)))
+        }
+    }
     func testOldImportAndSettingsDecodeWithoutPlanningFields() throws {
         var session = ImportSession(); session.text = "旧记录"
         let data = try JSONEncoder().encode(session)
@@ -65,7 +76,7 @@ final class PlanningTests: XCTestCase {
                 let raw = String(decoding: data, as: UTF8.self)
                 XCTAssertTrue(raw.contains("availableIntervals")); XCTAssertTrue(raw.contains("conversation"))
                 XCTAssertFalse(raw.contains("private-calendar-id")); XCTAssertFalse(raw.contains("private-event-id"))
-                XCTAssertNil(request.url?.query)
+                XCTAssertEqual(request.url?.query, format == .gemini ? "alt=sse" : nil)
                 let content = #"{"kind":"question","message":"晚上几点方便？","options":["七点","八点"]}"#
                 let envelope: [String: Any]
                 switch format {

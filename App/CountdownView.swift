@@ -1,9 +1,12 @@
 import SwiftUI
 import UIKit
-import UniformTypeIdentifiers
 import ShikeCore
 
 struct CountdownScreen: View {
+    @Environment(\.workspaceWidth) private var workspaceWidth
+    @EnvironmentObject private var workspace: Workspace
+    @State private var inlineSelection: Countdown?
+    private var usesColumns: Bool { workspaceWidth >= 880 && !dynamicTypeSize.isAccessibilitySize }
     @ObservedObject var store: CountdownStore
     let coordinator: CountdownCoordinator
     @ObservedObject var preferences: Preferences
@@ -22,6 +25,11 @@ struct CountdownScreen: View {
     @State private var managing = false
     @State private var selected: Countdown?
     @State private var routeMessage: String?
+    @State private var selecting = false
+    @State private var selectedIDs: Set<UUID> = []
+    @State private var deleteRequested = false
+    @State private var pendingDeletion: Set<UUID> = []
+    @State private var batchError: String?
     private var entries: [Countdown] {
         store.entries.filter { entry in
             (category == "all" || (category == "none" ? entry.categoryID == nil : entry.categoryID?.uuidString == category)) &&
@@ -36,6 +44,7 @@ struct CountdownScreen: View {
     var body: some View {
         ZStack {
             PaperBackground()
+            HStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     CountdownYearProgress()
@@ -76,6 +85,7 @@ struct CountdownScreen: View {
                         }
                     }
                     if let error = store.error { NoteMessage(text: error, isError: true) }
+                    if let batchError { NoteMessage(text: batchError, isError: true) }
                     if let routeMessage { NoteMessage(text: routeMessage, isError: false) }
                     if entries.isEmpty {
                         PaperCard {
@@ -90,19 +100,26 @@ struct CountdownScreen: View {
                     TimelineView(.periodic(from: .now, by: entries.contains { $0.targetTime != nil } ? 1 : 60)) { context in
                         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12, alignment: .top), count: layout == .double && !dynamicTypeSize.isAccessibilitySize ? 2 : 1), alignment: .leading, spacing: layout == .strip ? 10 : 16) {
                             ForEach(entries) { entry in
-                                Button { selected = entry } label: {
-                                    CountdownCard(entry: entry, category: store.categories.first { $0.id == entry.categoryID }?.name, now: context.date, layout: layout)
-                                }.buttonStyle(.plain).accessibilityIdentifier("countdown-\(entry.id)")
+                                Button {
+                                    if selecting { toggleSelection(entry.id) } else { open(entry) }
+                                } label: {
+                                    CountdownCard(entry: entry, category: store.categories.first { $0.id == entry.categoryID }?.name,
+                                                  now: context.date, layout: layout, selection: selecting ? selectedIDs.contains(entry.id) : nil)
+                                }.buttonStyle(HoldActionButtonStyle(holdLabel: "批量选择") { beginSelection(entry.id) })
+                                    .accessibilityIdentifier("countdown-\(entry.id)")
+                                    .accessibilityValue(selecting ? (selectedIDs.contains(entry.id) ? "已选择" : "未选择") : "")
+                                    .accessibilityAddTraits(selectedIDs.contains(entry.id) ? .isSelected : [])
+                                    .accessibilityHint(selecting ? "轻点切换选择" : "轻点查看，长按批量选择")
                             }
                         }
                     }
                 }.padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity)
                     .background(CountdownPullObserver(onPull: { distance in
-                        guard !adding, !managing, selected == nil else { return }
+                        guard !selecting, !adding, !managing, selected == nil else { return }
                         pullDistance = distance
                     }, onRelease: { distance in
                         pullDistance = 0
-                        guard distance >= addPullThreshold, !adding, !managing, selected == nil else { return }
+                        guard distance >= addPullThreshold, !selecting, !adding, !managing, selected == nil else { return }
                         searchFocused = false
                         adding = true
                     }))
@@ -122,30 +139,131 @@ struct CountdownScreen: View {
                             .allowsHitTesting(false).accessibilityHidden(true)
                     }
                 }
+                .frame(maxWidth: inlineSelection != nil && !usesColumns ? 0 : .infinity)
+                .clipped().accessibilityHidden(inlineSelection != nil && !usesColumns)
+            if usesColumns || inlineSelection != nil {
+                Divider()
+                ZStack {
+                    if let inlineSelection {
+                        CountdownDetail(store: store, reminders: coordinator.reminders, id: inlineSelection.id, onClose: { self.inlineSelection = nil })
+                            .id(inlineSelection.id)
+                    } else {
+                        VStack(spacing: 18) {
+                            CalendarDoodle()
+                            Text("选一个日子，慢慢翻看。").font(Notebook.handwriting(24))
+                            Text("提醒、备注和分享卡片，都放在这里。")
+                                .font(.subheadline).foregroundStyle(Notebook.secondaryInk)
+                        }.padding(24)
+                    }
+                }.frame(maxWidth: .infinity, maxHeight: .infinity).accessibilityIdentifier("countdownDetailPane")
+            }
+            }
         }.coordinateSpace(name: "countdownViewport")
             .foregroundStyle(Notebook.ink).navigationTitle("倒数日").navigationBarTitleDisplayMode(.inline)
             .scrollDismissesKeyboard(.interactively)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) { Button { managing = true } label: { Image(systemName: "folder") }.accessibilityLabel("管理倒数日分类") }
-                ToolbarItem(placement: .primaryAction) { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("新增倒数日").accessibilityIdentifier("addCountdown") }
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if selecting { selectionBar }
             }
-            .sheet(isPresented: $adding) { CountdownEditor(store: store, reminders: coordinator.reminders, entry: Countdown(), preferences: preferences) }
-            .sheet(isPresented: $managing) { CountdownCategoriesView(store: store) }
-            .sheet(item: $selected) { CountdownDetail(store: store, reminders: coordinator.reminders, id: $0.id) }
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    if selecting { Button("完成") { endSelection() }.accessibilityIdentifier("finishCountdownSelection") }
+                    else { Button { managing = true } label: { Image(systemName: "folder") }.accessibilityLabel("管理倒数日分类") }
+                }
+                ToolbarItem(placement: .primaryAction) {
+                    if PlatformSupport.isMac { Button { searchExpanded = true; searchFocused = true } label: { Image(systemName: "magnifyingglass") }.accessibilityLabel("搜索倒数日") }
+                }
+                ToolbarItem(placement: .primaryAction) { Button { adding = true } label: { Image(systemName: "plus") }.accessibilityLabel("新增倒数日").accessibilityIdentifier("addCountdown").disabled(selecting) }
+            }
+            .alert("删除这 \(pendingDeletion.count) 个日子？", isPresented: $deleteRequested) {
+                Button("删除", role: .destructive) {
+                    do {
+                        try store.deleteEntries(pendingDeletion)
+                        routeMessage = "已删除 \(pendingDeletion.count) 个日子。"
+                        endSelection()
+                    } catch { batchError = error.localizedDescription }
+                    pendingDeletion = []
+                }.accessibilityIdentifier("confirmDeleteCountdowns")
+                Button("取消", role: .cancel) { pendingDeletion = [] }
+            } message: { Text("删除后会同步到其他设备，无法撤销。") }
+            .sheet(isPresented: $adding) { CountdownEditor(store: store, reminders: coordinator.reminders, entry: Countdown(), preferences: preferences).workspaceSheet() }
+            .sheet(isPresented: $managing) { CountdownCategoriesView(store: store).workspaceSheet() }
+            .sheet(item: $selected) { CountdownDetail(store: store, reminders: coordinator.reminders, id: $0.id).workspaceSheet() }
+            .onChange(of: workspace.pending?.id) { _, _ in processWorkspaceAction() }
+            .onAppear { processWorkspaceAction() }
             .onAppear { consumeRoute() }
             .onChange(of: navigation.pending) { _, _ in consumeRoute() }
-            .onChange(of: pullArmed) { _, armed in if armed { UIImpactFeedbackGenerator(style: .light).impactOccurred() } }
+            .onChange(of: pullArmed) { _, armed in if armed { PlatformSupport.lightFeedback() } }
             .onChange(of: store.categories) { _, values in if category != "all" && category != "none" && !values.contains(where: { $0.id.uuidString == category }) { category = "none" } }
+            .onChange(of: category) { _, _ in selectedIDs = [] }
+            .onChange(of: search) { _, _ in selectedIDs.formIntersection(entries.map(\.id)) }
+            .onChange(of: store.revision) { _, _ in selectedIDs.formIntersection(entries.map(\.id)) }
+            .onDisappear { endSelection() }
+    }
+    private var selectionBar: some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("已选择 \(selectedIDs.count) 个日子").font(.subheadline).accessibilityIdentifier("countdownSelectionCount")
+                Spacer()
+                Button(selectedIDs.count == entries.count && !entries.isEmpty ? "取消全选" : "全选") {
+                    selectedIDs = selectedIDs.count == entries.count ? [] : Set(entries.map(\.id))
+                }.frame(minHeight: 36).accessibilityIdentifier("selectAllCountdowns")
+            }
+            HStack(spacing: 16) {
+                Menu {
+                    Button("未分类") { moveSelection(to: nil) }
+                    ForEach(store.categories) { group in
+                        Button(group.name) { moveSelection(to: group.id) }
+                    }
+                } label: { Label("移动分组", systemImage: "folder").frame(maxWidth: .infinity, minHeight: 44) }
+                    .accessibilityIdentifier("moveSelectedCountdowns")
+                Button(role: .destructive) { pendingDeletion = selectedIDs; deleteRequested = true } label: {
+                    Label("删除", systemImage: "trash").frame(maxWidth: .infinity, minHeight: 44)
+                }.accessibilityIdentifier("deleteSelectedCountdowns")
+            }.disabled(selectedIDs.isEmpty)
+        }.padding(.horizontal, 22).padding(.vertical, 8).frame(maxWidth: 680)
+            .frame(maxWidth: .infinity).background(.regularMaterial)
+    }
+    private func beginSelection(_ id: UUID) {
+        selected = nil; inlineSelection = nil; searchFocused = false; batchError = nil
+        selecting = true; selectedIDs.insert(id); pullDistance = 0
+        PlatformSupport.lightFeedback()
+    }
+    private func toggleSelection(_ id: UUID) {
+        if !selectedIDs.insert(id).inserted { selectedIDs.remove(id) }
+    }
+    private func endSelection() { selecting = false; selectedIDs = []; batchError = nil }
+    private func moveSelection(to group: UUID?) {
+        let count = selectedIDs.count
+        do {
+            try store.moveEntries(selectedIDs, to: group)
+            routeMessage = "已将 \(count) 个日子移到「\(store.categories.first { $0.id == group }?.name ?? "未分类")」。"
+            endSelection()
+        } catch { batchError = error.localizedDescription }
+    }
+    private func open(_ entry: Countdown) {
+        // Keep the presentation chosen at open time, even if the window rotates or shrinks.
+        if usesColumns || inlineSelection != nil { inlineSelection = entry }
+        else { selected = entry }
+    }
+    private func processWorkspaceAction() {
+        guard let request = workspace.pending, request.section == 4, !adding, !managing, selected == nil else { return }
+        workspace.consume(request.id)
+        switch request.action {
+        case .new: endSelection(); adding = true
+        case .search: searchExpanded = true; searchFocused = true
+        default: break
+        }
     }
     private func consumeRoute() {
         guard let route = navigation.pending else { return }
+        endSelection()
         navigation.pending = nil; search = ""; searchExpanded = false; adding = false; managing = false
-        category = route.group; selected = nil; routeMessage = nil
+        category = route.group; selected = nil; inlineSelection = nil; routeMessage = nil
         if category != "all" && category != "none" && !store.categories.contains(where: { $0.id.uuidString == category }) {
             routeMessage = "这个分组已被删除，请重新选择。"
         }
         if let id = route.id {
-            if let entry = store.entries.first(where: { $0.id == id }) { selected = entry }
+            if let entry = store.entries.first(where: { $0.id == id }) { open(entry) }
             else { routeMessage = "这个日子已被删除。" }
         }
     }
@@ -276,6 +394,7 @@ struct CountdownCard: View {
     let category: String?
     let now: Date
     var layout: CountdownLayout = .single
+    var selection: Bool? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private var compact: Bool { layout != .single }
     var body: some View {
@@ -298,10 +417,14 @@ struct CountdownCard: View {
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
-        }
+        }.overlay { if selection == true { PencilBorder().stroke(Notebook.accent, lineWidth: 2) } }
     }
     private var heading: some View {
         HStack(alignment: .top, spacing: 5) {
+            if let selection {
+                Image(systemName: selection ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20)).foregroundStyle(Notebook.accent).padding(.top, 3).accessibilityHidden(true)
+            }
             Text(entry.title).font(Notebook.handwriting(compact ? 20 : 25, relativeTo: .title2))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
@@ -341,12 +464,14 @@ struct CountdownDetail: View {
     @ObservedObject var store: CountdownStore
     @ObservedObject var reminders: CountdownReminderService
     let id: UUID
+    var onClose: (() -> Void)? = nil
     @Environment(\.dismiss) private var dismiss
     @State private var editing = false
     @State private var deleting = false
     @State private var imageExport: CountdownImageExport?
     @State private var error: String?
     private var entry: Countdown? { store.entries.first { $0.id == id } }
+    private func closeDetail() { if let onClose { onClose() } else { dismiss() } }
     var body: some View {
         NavigationStack {
             ZStack {
@@ -406,13 +531,13 @@ struct CountdownDetail: View {
                 } else { Text("这个日子已被删除。").font(Notebook.handwriting(25)) }
             }.foregroundStyle(Notebook.ink).navigationTitle("记住这一天").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("完成") { dismiss() } }
+                    ToolbarItem(placement: .cancellationAction) { Button("完成") { closeDetail() } }
                     ToolbarItem(placement: .primaryAction) { if entry != nil { Button("编辑") { editing = true }.accessibilityIdentifier("editCountdown") } }
                 }
-                .sheet(isPresented: $editing) { if let entry { CountdownEditor(store: store, reminders: reminders, entry: entry) } }
-                .sheet(item: $imageExport) { CountdownImagePreview(export: $0) }
+                .sheet(isPresented: $editing) { if let entry { CountdownEditor(store: store, reminders: reminders, entry: entry).workspaceSheet() } }
+                .sheet(item: $imageExport) { CountdownImagePreview(export: $0).workspaceSheet() }
                 .alert("删除这个倒数日？", isPresented: $deleting) {
-                    Button("删除", role: .destructive) { do { try store.delete(id); dismiss() } catch { self.error = error.localizedDescription } }
+                    Button("删除", role: .destructive) { do { try store.delete(id); closeDetail() } catch { self.error = error.localizedDescription } }
                     Button("取消", role: .cancel) {}
                 } message: { Text("开启 iCloud 同步时，其他设备上的这条记录也会删除。") }
         }.tint(Notebook.accent)
@@ -564,7 +689,7 @@ struct CountdownEditor: View {
             }.scrollDismissesKeyboard(.interactively) }
                 .foregroundStyle(Notebook.ink).navigationTitle(onSave != nil ? "核对这个日子" : (expectedRevision == nil ? "记下一个日子" : "编辑倒数日")).navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving) }
+                    ToolbarItem(placement: .cancellationAction) { Button("取消") { dismiss() }.disabled(saving).accessibilityIdentifier("cancelCountdownEditing") }
                     ToolbarItem(placement: .confirmationAction) { Button("保存") { save() }.disabled(saving || !dateConfirmed || entry.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty).accessibilityIdentifier(onSave == nil ? "saveCountdown" : "reviewSaveCountdown") }
                     ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { focused = nil } }
                 }
@@ -666,25 +791,18 @@ private func lunarDescription(_ entry: Countdown) -> String {
     return "农历\(lunar.isLeapMonth ? "闰" : "")\(months[max(0, min(11, lunar.month - 1))])月\(lunar.day)日"
 }
 
-struct CountdownPNGDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [.png] }
-    var data: Data
-    init(data: Data) { self.data = data }
-    init(configuration: ReadConfiguration) throws {
-        guard let data = configuration.file.regularFileContents else { throw ShikeError.message("无法读取图片。") }
-        self.data = data
-    }
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
-}
-
 struct CountdownImageExport: Identifiable {
     let id = UUID()
     let title: String
     let image: UIImage
     let data: Data
     let url: URL
-    @MainActor static func make(entry: Countdown, category: String?, now: Date = .now) throws -> Self {
-        let content = CountdownShareCard(entry: entry, category: category, now: now)
+    let entry: Countdown
+    let category: String?
+    let now: Date
+    let art: CountdownArtwork
+    @MainActor static func make(entry: Countdown, category: String?, now: Date = .now, art: CountdownArtwork = .preferred) throws -> Self {
+        let content = CountdownShareCard(entry: entry, category: category, now: now, art: art)
             .foregroundStyle(Notebook.ink).environment(\.colorScheme, .light).environment(\.dynamicTypeSize, .large)
         let renderer = ImageRenderer(content: content); renderer.scale = 2; renderer.isOpaque = true
         guard let image = renderer.uiImage, let data = image.pngData() else { throw ShikeError.message("图片生成失败，请重试。") }
@@ -697,7 +815,7 @@ struct CountdownImageExport: Identifiable {
         }
         let url = folder.appendingPathComponent("Shike_Countdown_\(UUID().uuidString).png")
         try data.write(to: url, options: .atomic)
-        return Self(title: entry.title, image: image, data: data, url: url)
+        return Self(title: entry.title, image: image, data: data, url: url, entry: entry, category: category, now: now, art: art)
     }
 }
 
@@ -706,6 +824,8 @@ private struct CountdownShareCard: View {
     let entry: Countdown
     let category: String?
     let now: Date
+    let art: CountdownArtwork
+    var chooseArtwork: (() -> Void)?
     private var note: String {
         let value = entry.notes.trimmingCharacters(in: .whitespacesAndNewlines)
         return value.count > 240 ? String(value.prefix(240)) + "…" : value
@@ -762,8 +882,15 @@ private struct CountdownShareCard: View {
                 }.padding(.top, 4)
             }
             Spacer(minLength: 0)
-            Image("SettingsCompanions").resizable().scaledToFit().frame(width: 310, height: 207)
-                .frame(maxWidth: .infinity).accessibilityHidden(true)
+            if let chooseArtwork {
+                Button(action: chooseArtwork) {
+                    Image(art.asset).resizable().scaledToFit().frame(width: 310, height: 207).contentShape(Rectangle())
+                }.buttonStyle(.plain).frame(maxWidth: .infinity)
+                    .accessibilityLabel("更换插画，\(art.title)").accessibilityIdentifier("chooseCountdownArtwork")
+            } else {
+                Image(art.asset).resizable().scaledToFit().frame(width: 310, height: 207)
+                    .frame(maxWidth: .infinity).accessibilityHidden(true)
+            }
             HStack(alignment: .bottom, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
                     Text("拾刻计划").font(Notebook.handwriting(28))
@@ -782,29 +909,37 @@ private struct CountdownShareCard: View {
 }
 
 private struct CountdownImagePreview: View {
-    let export: CountdownImageExport
+    @State private var export: CountdownImageExport
+    @State private var choosingArt = false
+    init(export: CountdownImageExport) { _export = State(initialValue: export) }
     @Environment(\.dismiss) private var dismiss
-    @State private var saving = false
     @State private var message: String?
     @State private var failed = false
     var body: some View {
         NavigationStack {
             ZStack { PaperBackground(); ScrollView {
                 VStack(spacing: 22) {
-                    Image(uiImage: export.image).resizable().scaledToFit().accessibilityLabel(export.title + "的卡片图片")
+                    GeometryReader { geometry in
+                        CountdownShareCard(entry: export.entry, category: export.category, now: export.now,
+                                           art: export.art, chooseArtwork: { choosingArt = true })
+                            .foregroundStyle(Notebook.ink).environment(\.colorScheme, .light).environment(\.dynamicTypeSize, .large)
+                            .fixedSize().scaleEffect(geometry.size.width / 560, anchor: .topLeading)
+                            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .topLeading)
+                    }.aspectRatio(export.image.size.width / export.image.size.height, contentMode: .fit)
                     ShareLink(item: export.url, preview: SharePreview(export.title, image: Image(uiImage: export.image))) {
                         Label("分享图片", systemImage: "square.and.arrow.up")
                     }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("shareCountdownPNG")
-                    Button("存储到文件") { saving = true }.buttonStyle(InkButtonStyle(prominent: false)).accessibilityIdentifier("saveCountdownPNG")
                     if let message { NoteMessage(text: message, isError: failed) }
                 }.padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity)
             } }.navigationTitle("卡片图片").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
-                .fileExporter(isPresented: $saving, document: CountdownPNGDocument(data: export.data), contentType: .png, defaultFilename: "Shike_Countdown") { result in
-                    switch result {
-                    case .success: message = "卡片图片已保存。"; failed = false
-                    case .failure(let error): message = error.localizedDescription; failed = true
-                    }
+                .sheet(isPresented: $choosingArt) {
+                    CountdownArtworkPicker(selected: export.art) { art in
+                        do {
+                            let next = try CountdownImageExport.make(entry: export.entry, category: export.category, now: export.now, art: art)
+                            export = next; art.remember(); message = nil
+                        } catch { message = error.localizedDescription; failed = true }
+                    }.workspaceSheet()
                 }
         }.tint(Notebook.accent)
     }

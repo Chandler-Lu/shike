@@ -108,8 +108,8 @@ public struct CountdownWidgetSelection: Sendable {
     public let totalCount: Int
     public var visibleCount: Int { upcoming.count + elapsed.count }
     public var remainingCount: Int { max(0, totalCount - visibleCount) }
-    public init(_ entries: [Countdown], limitPerSection: Int, now: Date, systemZone: TimeZone = .current) {
-        let ordered = CountdownPresentation.sorted(entries, now: now, systemZone: systemZone)
+    public init(_ entries: [Countdown], limitPerSection: Int, now: Date, systemZone: TimeZone = .current, preserveOrder: Bool = false) {
+        let ordered = preserveOrder ? entries : CountdownPresentation.sorted(entries, now: now, systemZone: systemZone)
         let values = Dictionary(uniqueKeysWithValues: entries.map { ($0.id, CountdownDisplayValue($0, now: now, systemZone: systemZone)) })
         func distance(_ entry: Countdown) -> Double {
             let value = values[entry.id]!
@@ -120,7 +120,9 @@ public struct CountdownWidgetSelection: Sendable {
             return abs(value.target.timeIntervalSince(now))
         }
         func section(_ elapsed: Bool) -> [Countdown] {
-            ordered.filter { (values[$0.id]!.phase == .elapsed) == elapsed }.sorted {
+            let matching = ordered.filter { (values[$0.id]!.phase == .elapsed) == elapsed }
+            if preserveOrder { return matching }
+            return matching.sorted {
                 if $0.pinned != $1.pinned { return $0.pinned }
                 let a = distance($0), b = distance($1)
                 return a != b ? a < b : $0.id.uuidString < $1.id.uuidString
@@ -132,7 +134,9 @@ public struct CountdownWidgetSelection: Sendable {
         elapsed = Array(past.prefix(future.isEmpty ? limit * 2 : limit))
         totalCount = entries.count
         primary = ordered.first
-        if let first = ordered.first {
+        if preserveOrder {
+            secondary = ordered.dropFirst().first
+        } else if let first = ordered.first {
             secondary = (values[first.id]!.phase == .elapsed ? future.first : past.first)
                 ?? ordered.first { $0.id != first.id }
         } else { secondary = nil }

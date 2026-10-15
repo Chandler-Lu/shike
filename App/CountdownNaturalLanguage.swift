@@ -6,6 +6,7 @@ import ShikeCore
     @Published var drafts: [CountdownDraft] = []
     @Published var error: String?
     @Published private(set) var busy = false
+    @Published private(set) var progressMessage = "正在识别日子…"
     @Published private(set) var recognizedText: String?
     @Published var consentRequest: ExtractionConsent?
     let referenceDate = Date.now
@@ -41,7 +42,14 @@ import ShikeCore
             }
             let key = fixture ? "" : try preferences.activeProfile.map { try preferences.profileKey($0) } ?? ""
             let input = text, categories = store.categories, zone = TimeZone.current
-            let token = UUID(); generation = token; busy = true
+            let token = UUID(); generation = token; busy = true; progressMessage = "正在识别日子…"
+            let observer: LLMObserver = { [weak self] update in
+                guard case .progress(let progress) = update else { return }
+                Task { @MainActor [weak self] in
+                    guard let self, self.generation == token, self.busy else { return }
+                    self.progressMessage = progress.message
+                }
+            }
             operation = Task {
                 defer { if generation == token { busy = false; operation = nil } }
                 do {
@@ -51,10 +59,10 @@ import ShikeCore
                         try await Task.sleep(for: .milliseconds(250))
                         result = try CountdownExtraction.decode(Self.fixtureResponse, referenceDate: referenceDate, timeZone: zone, categories: categories)
                     } else {
-                        result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories)
+                        result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories, observer: observer)
                     }
                     #else
-                    result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories)
+                    result = try await client.extractCountdowns(text: input, referenceDate: referenceDate, timeZone: zone, configuration: configuration, apiKey: key, categories: categories, observer: observer)
                     #endif
                     try Task.checkCancellation(); guard generation == token else { return }
                     drafts = result; recognizedText = input
@@ -98,7 +106,7 @@ struct CountdownNaturalLanguageView: View {
                     inputCard
                     if let error = controller.error { NoteMessage(text: error, isError: true) }
                     if controller.busy {
-                        HStack { ProgressView(); Text("正在识别日子…"); Spacer(); Button("取消识别") { controller.cancel() } }
+                        HStack { ProgressView(); Text(controller.progressMessage); Spacer(); Button("取消识别") { controller.cancel() } }
                     } else {
                         Button { focused = false; controller.recognize() } label: {
                             Label(controller.drafts.isEmpty ? "识别倒数日" : "重新识别", systemImage: "sparkles")

@@ -1,3 +1,4 @@
+#if !targetEnvironment(macCatalyst)
 import Foundation
 import Combine
 import WatchConnectivity
@@ -121,3 +122,12 @@ import ShikeCore
     nonisolated func sessionWatchStateDidChange(_ session: WCSession) { Task { @MainActor in lastSentRevision = nil; refresh() } }
     #endif
 }
+
+#else
+import ShikeCore
+
+/// Mac publishes the same widget snapshot locally; Watch transport belongs to the paired iPhone.
+@MainActor final class CountdownConnectivity {
+    func publish(_ snapshot: CountdownSnapshot) {}
+}
+#endif

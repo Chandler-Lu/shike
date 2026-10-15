@@ -9,6 +9,9 @@ final class ShareViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        #if targetEnvironment(macCatalyst)
+        preferredContentSize = CGSize(width: 720, height: 780)
+        #endif
         controller = ImportController(environment: environment, session: ImportSession(source: "分享"))
         let root = ShareRootView(controller: controller, finish: { [weak self] in self?.finish() })
         let host = UIHostingController(rootView: root)

@@ -47,7 +47,7 @@ struct LegalDocumentView: View {
     private var content: String {
         guard let url = Bundle.main.url(forResource: showsFontLicense ? "OFL" : "PrivacyPolicy", withExtension: "txt"),
               let text = try? String(contentsOf: url, encoding: .utf8) else {
-            return "无法打开说明。请联系 trlu1997@outlook.com。"
+            return "无法打开说明。请联系 shike@yeslu.cn。"
         }
         return text
     }

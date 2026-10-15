@@ -2,6 +2,7 @@ import SwiftUI
 import ShikeCore
 
 struct ImportFlowView: View {
+    @Environment(\.workspaceWidth) private var workspaceWidth
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var controller: ImportController
     @ObservedObject var calendars: CalendarService
@@ -9,14 +10,22 @@ struct ImportFlowView: View {
     var showsAPIProfilePicker = false
     var isLoadingInput = false
     var isPlanningContent = false
+    var onVoiceInput: (() -> Void)?
+    var voiceRecording = false
+    var voicePreparing = false
+    var voiceFinishing = false
+    var voiceInputEnabled = true
     @State private var isEditing = false
     @State private var editing: EventDraft?
     @State private var batchCalendar = ""
     @FocusState private var textFocused: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
+        let wide = workspaceWidth >= 880 && !isExtension && !isPlanningContent && !dynamicTypeSize.isAccessibilitySize
+        let columns = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 28)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
+        columns {
             if !isPlanningContent {
+            VStack(alignment: .leading, spacing: 20) {
             PaperCard {
                 VStack(alignment: .leading, spacing: 10) {
                     SourceTextHeader(preferences: controller.environment.preferences,
@@ -39,10 +48,24 @@ struct ImportFlowView: View {
                             Text("相对日期按 \(controller.session.createdAt.formatted(.dateTime.month().day().hour().minute())) 理解")
                         }.font(.caption).foregroundStyle(Notebook.secondaryInk)
                         Spacer(minLength: 0)
+                        if let onVoiceInput {
+                            Button { textFocused = false; onVoiceInput() } label: {
+                                Group {
+                                    if voicePreparing || voiceFinishing { ProgressView() }
+                                    else { Image(systemName: voiceRecording ? "stop.circle.fill" : "mic") }
+                                }.font(.system(size: 18, weight: .medium)).frame(width: 44, height: 44)
+                            }.buttonStyle(.plain).foregroundStyle(voiceRecording ? Notebook.red : Notebook.accent)
+                                .disabled(!voiceInputEnabled || voicePreparing || voiceFinishing)
+                                .accessibilityLabel(voiceRecording ? "停止语音输入" : "语音输入").accessibilityIdentifier("voiceInput")
+                        }
                         ExpandTextEditorControl(text: $controller.session.text, title: "原文",
                                                 editorID: isExtension ? "share-sourceText" : "sourceText",
                                                 placeholder: sourcePlaceholder) { textFocused = false }
                             .disabled(sourceEditingDisabled)
+                    }
+                    if voiceRecording || voicePreparing || voiceFinishing {
+                        Text(voicePreparing ? "正在开启麦克风…" : voiceFinishing ? "正在完成转写…" : "正在录音，点击停止按钮结束。")
+                            .font(.caption).foregroundStyle(Notebook.red).accessibilityIdentifier("voiceInputStatus")
                     }
                 }
             }
@@ -65,7 +88,7 @@ struct ImportFlowView: View {
                             controller.persistReportingError()
                         }.font(.subheadline)
                     }
-                }
+                }.disabled(isLoadingInput)
             }
 
             if let busy = controller.busyMessage {
@@ -83,7 +106,7 @@ struct ImportFlowView: View {
                         Text("AI 自动判断").tag(EventCategory?.none)
                         ForEach(EventCategory.allCases) { Text("指定为\($0.title)").tag(Optional($0)) }
                     }.pickerStyle(.menu).tint(Notebook.accent).accessibilityIdentifier("importCategory")
-                }
+                }.disabled(isLoadingInput)
                 let actionLayout = dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(spacing: 10)) : AnyLayout(HStackLayout(spacing: 12))
                 actionLayout {
@@ -92,10 +115,7 @@ struct ImportFlowView: View {
                             Label("帮我安排", systemImage: "bubble.left.and.bubble.right")
                         }.buttonStyle(InkButtonStyle(prominent: false)).accessibilityIdentifier("planEvents")
                     }
-                    Button {
-                        textFocused = false
-                        controller.parse()
-                    } label: {
+                    Button { textFocused = false; controller.parse() } label: {
                         Label(controller.session.hasParsed ? "重新提取日程" : "提取日程", systemImage: "sparkle")
                     }.buttonStyle(InkButtonStyle()).accessibilityIdentifier(isExtension ? "share-parseEvents" : "parseEvents")
                 }.disabled(controller.session.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isLoadingInput)
@@ -104,7 +124,9 @@ struct ImportFlowView: View {
                 }
             }
 
+            }.frame(maxWidth: .infinity, alignment: .topLeading)
             }
+            VStack(alignment: .leading, spacing: 20) {
             if !controller.session.drafts.isEmpty {
                 let summaryLayout = dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout())
@@ -155,21 +177,31 @@ struct ImportFlowView: View {
                         .font(Notebook.handwriting(18)).foregroundStyle(Notebook.ink).padding(.vertical, 8)
                 }
             }
+            else if wide {
+                PaperCard {
+                    VStack(alignment: .leading, spacing: 18) {
+                        Label("留一页，给新的安排", systemImage: "calendar.badge.clock").font(Notebook.handwriting(26))
+                        Text("在左边写下日程或想做的事。整理好的安排会出现在这里，核对后即可放进日历。")
+                            .font(.subheadline).foregroundStyle(Notebook.secondaryInk)
+                    }.frame(maxWidth: .infinity, minHeight: 210, alignment: .topLeading)
+                }.accessibilityIdentifier("resultsPlaceholder")
+            }
+            }.frame(maxWidth: .infinity, alignment: .topLeading).disabled(isLoadingInput)
         }.foregroundStyle(Notebook.ink)
         .accessibilityHidden(controller.showsPlanning && !isPlanningContent)
         .sheet(item: $editing) { draft in
             DraftEditor(draft: draft, calendars: calendars) { changed in try controller.applyEdit(changed, expected: draft) }
-                .presentationDetents([.large])
+                .presentationDetents([.large]).workspaceSheet()
         }
         .sheet(isPresented: Binding(get: { controller.review != nil && (isPlanningContent || !controller.showsPlanning) }, set: { if !$0 { controller.cancelReview() } })) {
-            GuidedReviewView(controller: controller).presentationDetents([.large])
+            GuidedReviewView(controller: controller).presentationDetents([.large]).workspaceSheet()
         }
         .sheet(item: Binding(get: { (isPlanningContent || !controller.showsPlanning) ? controller.consentRequest : nil }, set: { if $0 == nil && controller.consentRequest != nil { controller.declineExtraction() } })) { scope in
             ExtractionConsentView(scope: scope, allow: controller.allowExtraction, cancel: controller.declineExtraction)
-                .presentationDetents([.large])
+                .presentationDetents([.large]).workspaceSheet()
         }
         .sheet(isPresented: Binding(get: { controller.showsPlanning && !isPlanningContent && !isExtension }, set: { if !$0 && !isPlanningContent { controller.showsPlanning = false } })) {
-            PlanningView(controller: controller, calendars: calendars, preferences: controller.environment.preferences)
+            PlanningView(controller: controller, calendars: calendars, preferences: controller.environment.preferences).workspaceSheet()
         }
         .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { textFocused = false } } }
     }

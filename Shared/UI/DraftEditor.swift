@@ -15,6 +15,7 @@ struct DraftEditor: View {
     @State var draft: EventDraft
     @ObservedObject var calendars: CalendarService
     var reviewStep: DraftReviewStep? = nil
+    var calendarCreation = false
     let onSave: (EventDraft) throws -> Void
     @State private var errorMessage: String?
     @State private var confirmInterrupted = false
@@ -126,7 +127,7 @@ struct DraftEditor: View {
                     if reviewStep == nil, let errorMessage { Section { NoteMessage(text: errorMessage, isError: true) }.listRowBackground(Color.clear) }
                 }.scrollContentBackground(.hidden).scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle(reviewStep.map { "核对 \($0.number) / \($0.total)" } ?? (draft.isSaved ? "修改日程" : "日程草稿"))
+            .navigationTitle(reviewStep.map { "核对 \($0.number) / \($0.total)" } ?? (calendarCreation ? "新增日程" : draft.isSaved ? "修改日程" : "日程草稿"))
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 if let step = reviewStep {
@@ -158,7 +159,7 @@ struct DraftEditor: View {
                 }
                 if reviewStep == nil {
                     ToolbarItem(placement: .confirmationAction) {
-                        Button(draft.isSaved ? "保存修改" : "完成") {
+                        Button(calendarCreation ? "加入日历" : draft.isSaved ? "保存修改" : "完成") {
                             do { try onSave(draft); dismiss() } catch { errorMessage = error.localizedDescription }
                         }.fontWeight(.semibold).accessibilityIdentifier("finishEditing")
                     }
