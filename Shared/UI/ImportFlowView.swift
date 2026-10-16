@@ -45,10 +45,10 @@ struct ImportFlowView: View {
                     }.font(.body)
                     HStack(spacing: 5) {
                         Button { controller.refreshReferenceDate() } label: {
-                            HStack(alignment: .top, spacing: 5) {
-                                Image(systemName: "clock")
+                            HStack(spacing: 5) {
+                                Image(systemName: "clock").fixedSize()
                                 Text("相对日期按 \(referenceDateText) 理解")
-                                    .multilineTextAlignment(.leading)
+                                    .lineLimit(1).minimumScaleFactor(0.7).allowsTightening(true)
                             }.frame(minHeight: 44, alignment: .leading).contentShape(Rectangle())
                         }.buttonStyle(.plain).font(.caption).foregroundStyle(Notebook.secondaryInk)
                             .disabled(sourceEditingDisabled || controller.review != nil || controller.consentRequest != nil)
