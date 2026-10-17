@@ -335,29 +335,43 @@ private struct CountdownPullObserver: UIViewRepresentable {
 private struct CountdownYearProgress: View {
     @Environment(\.scenePhase) private var scenePhase
     @State private var now = Date.now
+    @State private var showsRemaining = false
 
     var body: some View {
         let progress = YearProgress(now: now, timeZone: .current)
-        let percentage = progress.fraction.formatted(.percent.precision(.fractionLength(1)))
-        VStack(alignment: .leading, spacing: 8) {
-            Text("今年已过 \(progress.elapsedDays) 天 · \(percentage)")
-                .font(Notebook.handwriting(17, relativeTo: .subheadline)).monospacedDigit()
-                .fixedSize(horizontal: false, vertical: true)
-            GeometryReader { geometry in
-                Capsule().fill(Notebook.ink.opacity(0.07))
-                    .overlay(alignment: .leading) {
-                        LinearGradient(colors: [Notebook.accent.opacity(0.75), Notebook.green, Notebook.yellow],
-                                       startPoint: .leading, endPoint: .trailing)
-                            .frame(width: max(0, geometry.size.width) * progress.fraction)
-                            .clipShape(Capsule())
-                    }
-                    .overlay(YearProgressOutline().stroke(Notebook.ink.opacity(0.22), lineWidth: 0.8))
-            }.frame(height: 10).accessibilityHidden(true)
+        let days = showsRemaining ? progress.totalDays - progress.elapsedDays : progress.elapsedDays
+        let fraction = Double(days) / Double(progress.totalDays)
+        let percentage = fraction.formatted(.percent.precision(.fractionLength(1)))
+        let direction = showsRemaining ? "剩余" : "已过"
+        Button {
+            var transaction = Transaction()
+            transaction.disablesAnimations = true
+            withTransaction(transaction) { showsRemaining.toggle() }
+        } label: {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("今年\(direction) \(days) 天 · \(percentage)")
+                    .font(Notebook.handwriting(17, relativeTo: .subheadline)).monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+                GeometryReader { geometry in
+                    Capsule().fill(Notebook.ink.opacity(0.07))
+                        .overlay(alignment: .leading) {
+                            LinearGradient(colors: [Notebook.accent.opacity(0.75), Notebook.green, Notebook.yellow],
+                                           startPoint: .leading, endPoint: .trailing)
+                                .frame(width: max(0, geometry.size.width) * fraction)
+                                .clipShape(Capsule())
+                        }
+                        .overlay(YearProgressOutline().stroke(Notebook.ink.opacity(0.22), lineWidth: 0.8))
+                }.frame(height: 10).accessibilityHidden(true)
+            }.frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+                .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(progress.year) 年，全年 \(progress.totalDays) 天，已过 \(progress.elapsedDays) 天")
+        .accessibilityLabel("\(progress.year) 年，全年 \(progress.totalDays) 天，\(direction) \(days) 天")
         .accessibilityValue(percentage)
+        .accessibilityHint(showsRemaining ? "切换为今年已过天数" : "切换为今年剩余天数")
         .accessibilityIdentifier("countdownYearProgress")
+        .onDisappear { showsRemaining = false }
         .task {
             // SwiftUI cancels this task when the strip leaves the screen.
             now = .now

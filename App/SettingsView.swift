@@ -268,8 +268,9 @@ private struct SearchAPISettingsView: View {
                     flush(); testTask?.cancel(); testing = false
                     preferences.setSearchEnabled(enabled)
                 })).labelsHidden().toggleStyle(.switch).fixedSize().tint(Notebook.accent)
+                    .padding(.trailing, 8)
                     .accessibilityIdentifier("searchEnabled")
-            }
+            }.frame(minHeight: 44)
             Text("所有模型接口共用。开启后，帮我安排会按需发送必要搜索词，并读取公开网页；不发送已有日历事件。搜索服务可能单独收费。")
                 .font(.caption).foregroundStyle(Notebook.secondaryInk)
             if preferences.searchSettings.enabled {
