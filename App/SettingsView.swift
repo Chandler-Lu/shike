@@ -114,10 +114,6 @@ struct SettingsView: View {
                     Label("在输入框中说下安排", systemImage: "mic").foregroundStyle(Notebook.ink)
                     Text("点击首页输入框右下角、放大按钮左侧的麦克风，即可开始录音，转写文字会直接追加到原文，再点一次停止。")
                 }
-                VStack(alignment: .leading, spacing: 8) {
-                    Label("联网安排", systemImage: "globe").foregroundStyle(Notebook.ink)
-                    Text("在“模型与 API”中开启联网搜索，选择博查或 Tavily 并填写搜索 Key，完成后自动保存。照常使用“帮我安排”，需要外部信息时会自动查询，方案下方可查看参考资料。关闭搜索不影响原有安排功能。")
-                }
             }.font(.subheadline).foregroundStyle(Notebook.secondaryInk).padding(.top, 12)
         } label: {
             Label("使用技巧", systemImage: "lightbulb").font(.subheadline)
@@ -271,7 +267,7 @@ private struct SearchAPISettingsView: View {
                     .padding(.trailing, 8)
                     .accessibilityIdentifier("searchEnabled")
             }.frame(minHeight: 44)
-            Text("所有模型接口共用。开启后，帮我安排会按需发送必要搜索词，并读取公开网页；不发送已有日历事件。搜索服务可能单独收费。")
+            Text("开启后，帮我安排会按需发送必要搜索词，并读取公开网页；不发送已有日历事件。搜索服务可能单独收费。")
                 .font(.caption).foregroundStyle(Notebook.secondaryInk)
             if preferences.searchSettings.enabled {
                 Picker("搜索服务", selection: Binding(get: { preferences.searchSettings.selectedService }, set: { service in
@@ -298,8 +294,8 @@ private struct SearchAPISettingsView: View {
                     HStack { if testing { ProgressView() }; Text(testing ? "取消测试" : "测试搜索") }
                 }.buttonStyle(InkButtonStyle(prominent: false))
                     .disabled(!testing && key.isEmpty).accessibilityIdentifier("testSearch")
-                Text("使用所选服务的官方接口，填写 Key 后自动保存并启用。Key 使用系统钥匙串，跟随 iCloud 同步设置；测试仅发送一条公开示例搜索词。")
-                    .font(.caption).foregroundStyle(Notebook.secondaryInk)
+//                Text("使用所选服务的官方接口，填写 Key 后自动保存并启用。Key 使用系统钥匙串，跟随 iCloud 同步设置；测试仅发送一条公开示例搜索词。")
+//                    .font(.caption).foregroundStyle(Notebook.secondaryInk)
                 if let message { NoteMessage(text: message, isError: isError).accessibilityIdentifier("searchMessage") }
             }
         }.textInputAutocapitalization(.never).autocorrectionDisabled()
