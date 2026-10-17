@@ -87,6 +87,26 @@ struct PlanningView: View {
                                     }.disabled(controller.isBusy)
                                 }
                             }
+                            if let research = plan?.research, !research.sources.isEmpty {
+                                DisclosureGroup("参考资料 · \(research.sources.count)") {
+                                    VStack(alignment: .leading, spacing: 14) {
+                                        ForEach(research.sources) { source in
+                                            VStack(alignment: .leading, spacing: 4) {
+                                                Link(destination: source.url) {
+                                                    HStack(alignment: .top) {
+                                                        Text(source.title).multilineTextAlignment(.leading)
+                                                        Image(systemName: "arrow.up.right")
+                                                    }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                                                }
+                                                Text("\(source.url.host ?? "") · \(source.kind == .page ? "网页正文" : "搜索摘要")\(plan?.sourceIDs?.contains(source.id) == true ? " · 方案引用" : "")")
+                                                    .font(.caption).foregroundStyle(Notebook.secondaryInk)
+                                                Text(source.retrievedAt, format: .dateTime.month().day().hour().minute())
+                                                    .font(.caption).foregroundStyle(Notebook.secondaryInk)
+                                            }
+                                        }
+                                    }.padding(.top, 10)
+                                }.font(.subheadline).accessibilityIdentifier("planningSources")
+                            }
                             if let error = controller.errorMessage { NoteMessage(text: error, isError: true) }
                             if let info = controller.information { NoteMessage(text: info) }
                             if let busy = controller.busyMessage {

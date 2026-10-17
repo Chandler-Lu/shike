@@ -147,6 +147,17 @@ enum KeychainStore {
     static func saveProfileKey(_ key: String, id: String, synchronizable: Bool) throws {
         try saveItem(key, query: profileQuery(id: id, synchronizable: synchronizable), synchronizable: synchronizable)
     }
+    static func searchKey(id: String, synchronizable: Bool) throws -> String {
+        try readItem(searchQuery(id: id, synchronizable: synchronizable))
+    }
+    static func saveSearchKey(_ key: String, id: String, synchronizable: Bool) throws {
+        try saveItem(key, query: searchQuery(id: id, synchronizable: synchronizable), synchronizable: synchronizable)
+    }
+    private static func searchQuery(id: String, synchronizable: Bool) -> [String: Any] {
+        var value = profileQuery(id: id, synchronizable: synchronizable)
+        value[kSecAttrService as String] = "app.shike.search-api"
+        return value
+    }
     private static func profileQuery(id: String, synchronizable: Bool) -> [String: Any] {
         var result = cloudQuery(id: id)
         result[kSecAttrSynchronizable as String] = synchronizable
@@ -221,6 +232,7 @@ enum KeychainStore {
     private var categoryReferences: [String: CalendarReference] = [:]
     @Published private(set) var calendarPreferences = CalendarPreferences()
     @Published private(set) var promptSettings = PromptSettings()
+    @Published private(set) var searchSettings = SearchSettings()
     @Published private(set) var profiles: [APIProfile] = []
     @Published private(set) var activeProfileID = ""
     @Published var configuration: APIConfiguration
@@ -243,6 +255,7 @@ enum KeychainStore {
         restoreReferences(); restoreProfiles()
         restoreCalendarPreferences()
         restorePromptSettings()
+        restoreSearchSettings()
         if let apple = self.cloud as? AppleCloudPreferencesStore {
             cloudObserver = NotificationCenter.default.addObserver(forName: NSUbiquitousKeyValueStore.didChangeExternallyNotification,
                                                                   object: apple.store, queue: .main) { [weak self] notification in
@@ -263,26 +276,37 @@ enum KeychainStore {
         restoreReferences(); restoreProfiles()
         restoreCalendarPreferences()
         restorePromptSettings()
+        restoreSearchSettings()
     }
     var activeProfile: APIProfile? { profiles.first { $0.id == activeProfileID } }
     func profileKey(_ profile: APIProfile) throws -> String { try KeychainStore.readProfile(profile, synchronizable: iCloudEnabled) }
     func save(configuration: APIConfiguration, key: String) throws {
         try saveProfile(id: activeProfile?.id, name: activeProfile?.name ?? "默认接口", configuration: configuration, key: key)
     }
-    func saveProfile(id: String?, name: String, configuration: APIConfiguration, key: String) throws {
+    /// A nil key means metadata-only editing; keep the existing Keychain association, even while locked.
+    func saveProfile(id: String?, name: String, configuration: APIConfiguration, key: String?) throws {
         guard id != nil || profiles.count < 100 else { throw ShikeError.message("最多保存 100 个接口，请先删除不再使用的配置。") }
         try validateProfileConfiguration(configuration)
+        let existing = profiles.first(where: { $0.id == id })
+        guard id == nil || existing != nil else { throw ShikeError.message("此接口已被删除，请重新选择接口。") }
         let name = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { throw ShikeError.message("请为接口填写名称。") }
-        let cleanKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let existing = profiles.first(where: { $0.id == id }), iCloudEnabled, cleanKey.isEmpty,
-           existing.credentialID != nil, try profileKey(existing).isEmpty {
-            throw ShikeError.message("同步的 API Key 尚未到达，请稍后检查同步，或手动填写 Key 后保存。")
+        var profile = APIProfile(id: id ?? UUID().uuidString, name: name.isEmpty ? (existing?.name ?? availableProfileName("新接口")) : name,
+                                 configuration: configuration, credentialID: existing?.credentialID,
+                                 usesLegacyCredential: existing?.usesLegacyCredential ?? false)
+        if let key {
+            let cleanKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+            let oldKey = try existing.map { try profileKey($0) } ?? ""
+            if iCloudEnabled, cleanKey.isEmpty, existing?.credentialID != nil, oldKey.isEmpty {
+                throw ShikeError.message("同步的 API Key 尚未到达，请稍后检查同步，或手动填写 Key。")
+            }
+            if cleanKey != oldKey {
+                let credential = cleanKey.isEmpty ? nil : UUID().uuidString
+                if let credential { try KeychainStore.saveProfileKey(cleanKey, id: credential, synchronizable: iCloudEnabled) }
+                profile.credentialID = credential
+                profile.usesLegacyCredential = false
+            }
         }
-        let credential = UUID().uuidString
-        try KeychainStore.saveProfileKey(cleanKey, id: credential, synchronizable: iCloudEnabled)
-        let profile = APIProfile(id: id ?? UUID().uuidString, name: name, configuration: configuration,
-                                 credentialID: cleanKey.isEmpty ? nil : credential)
+        guard profile != existing || activeProfileID != profile.id else { return }
         storeProfile(profile)
     }
     func createBlankProfile() throws {
@@ -308,11 +332,8 @@ enum KeychainStore {
     }
     private func validateProfileConfiguration(_ configuration: APIConfiguration) throws {
         let url = configuration.baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        let model = configuration.model.trimmingCharacters(in: .whitespacesAndNewlines)
-        // Empty profiles are saved placeholders; requests still require a complete endpoint.
-        if url.isEmpty && model.isEmpty { return }
-        _ = try configuration.endpoint()
-        guard !model.isEmpty else { throw ShikeError.message("请填写模型名称。") }
+        // Save partial forms too. Requests separately require the URL, model and key.
+        if !url.isEmpty { _ = try configuration.endpoint() }
     }
     private func storeProfile(_ profile: APIProfile) {
         if let index = profiles.firstIndex(where: { $0.id == profile.id }) { profiles[index] = profile }
@@ -353,7 +374,7 @@ enum KeychainStore {
     var exportPreferences: AppDataExport.PreferencesData {
         .init(iCloudEnabled: iCloudEnabled, categoryRoutingEnabled: categoryRoutingEnabled,
               defaultCalendar: defaultReference, categoryCalendars: categoryReferences,
-              activeProfileID: activeProfileID, calendar: calendarPreferences)
+              activeProfileID: activeProfileID, calendar: calendarPreferences, search: searchSettings.withoutCredentials)
     }
     func validateImport(_ backup: AppDataExport) throws {
         let ids = Set(profiles.map(\.id))
@@ -363,6 +384,10 @@ enum KeychainStore {
     }
     func importSettings(_ imported: AppDataImport) {
         let backup = imported.backup
+        if let search = backup.preferences.search, searchSettings == SearchSettings() {
+            searchSettings = search.withoutCredentials
+            defaults.set(try? JSONEncoder().encode(searchSettings), forKey: "searchSettings")
+        }
         // Keep existing endpoints and their Keychain associations together.
         let ids = Set(profiles.map(\.id))
         profiles += backup.apiProfiles.filter { !ids.contains($0.id) }.map {
@@ -430,8 +455,10 @@ enum KeychainStore {
             guard let cloud, cloud.accountAvailable else { throw ShikeError.message("请先在系统设置登录 iCloud，并开启 iCloud Drive 与密码和钥匙串。") }
             guard cloud.synchronize() else { throw ShikeError.message("iCloud 暂不可用，请检查网络与应用的 iCloud 权限。") }
             if let remote = try cloudSnapshot() {
+                if remote.searchSettings == nil { try migrateSearchKeys(toCloud: true) }
                 iCloudEnabled = true; defaults.set(true, forKey: "iCloudSettingsEnabled")
                 apply(remote)
+                if remote.searchSettings == nil, searchSettings != SearchSettings() { publishCloudSettings() }
             } else {
                 var migrated: [APIProfile] = []
                 for var profile in profiles {
@@ -442,17 +469,19 @@ enum KeychainStore {
                     profile.credentialID = key.isEmpty ? nil : id; profile.usesLegacyCredential = false
                     migrated.append(profile)
                 }
+                try migrateSearchKeys(toCloud: true)
                 profiles = migrated; persistProfiles()
                 iCloudEnabled = true; defaults.set(true, forKey: "iCloudSettingsEnabled")
                 if profiles.isEmpty && configuration.baseURL.isEmpty && configuration.model.isEmpty &&
                     defaultCalendarID.isEmpty && categoryCalendars.isEmpty && !categoryRoutingEnabled &&
-                    promptSettings.isDefault && calendarPreferences == CalendarPreferences() {
+                    promptSettings.isDefault && calendarPreferences == CalendarPreferences() && searchSettings == SearchSettings() {
                     // An empty fresh install must not replace remote settings before
                     // the initial iCloud download has had a chance to arrive.
-                    syncStatus = "等待 iCloud 设置到达，也可以先填写并保存配置。"
+                    syncStatus = "等待 iCloud 设置到达，也可以先填写接口，内容会自动保存。"
                 } else { publishCloudSettings() }
             }
         } else {
+            try migrateSearchKeys(toCloud: false)
             for profile in profiles {
                 if let id = profile.credentialID {
                     let key = try profileKey(profile)
@@ -521,6 +550,7 @@ enum KeychainStore {
             throw ShikeError.message("iCloud 设置版本无法读取，本机设置已保留。")
         }
         try snapshot.promptSettings?.validate()
+        try snapshot.searchSettings?.validate()
         if !snapshot.configuration.baseURL.isEmpty { _ = try snapshot.configuration.endpoint() }
         if let profiles = snapshot.profiles {
             guard profiles.count <= 100, Set(profiles.map(\.id)).count == profiles.count else { throw ShikeError.message("iCloud 接口列表无效，本机设置已保留。") }
@@ -535,6 +565,7 @@ enum KeychainStore {
                                              categoryCalendars: categoryReferences, profiles: profiles, activeProfileID: activeProfileID)
         snapshot.calendarPreferences = calendarPreferences
         snapshot.promptSettings = promptSettings
+        snapshot.searchSettings = searchSettings
         guard let data = try? JSONEncoder().encode(snapshot), data.count <= 500_000 else { syncStatus = "同步设置过大或编码失败，请减少接口配置。"; return }
         defaults.set(snapshot.revision.uuidString, forKey: "cloudRevision")
         defaults.set(snapshot.updatedAt, forKey: "cloudUpdatedAt")
@@ -542,6 +573,10 @@ enum KeychainStore {
         syncStatus = cloud.accountAvailable ? "设置已保存，等待 iCloud 同步。" : "等待 iCloud 可用；设置已保留在本机。"
     }
     private func apply(_ snapshot: CloudSettingsSnapshot) {
+        if let value = snapshot.searchSettings {
+            searchSettings = value
+            defaults.set(try? JSONEncoder().encode(value), forKey: "searchSettings")
+        }
         if let value = snapshot.promptSettings {
             promptSettings = value
             defaults.set(try? JSONEncoder().encode(value), forKey: "promptSettings")
@@ -576,5 +611,99 @@ enum KeychainStore {
     private func restoreReferences() {
         defaultReference = defaults.data(forKey: "defaultCalendarReference").flatMap { try? JSONDecoder().decode(CalendarReference?.self, from: $0) } ?? nil
         categoryReferences = defaults.data(forKey: "categoryCalendarReferences").flatMap { try? JSONDecoder().decode([String: CalendarReference].self, from: $0) } ?? [:]
+    }
+}
+
+extension Preferences {
+    private var searchGrants: [String] { defaults.stringArray(forKey: "searchServiceGrants") ?? [] }
+    var searchAuthorized: Bool { searchSettings.selected.authorizationScope.map(searchGrants.contains) == true }
+    var searchReady: Bool {
+        searchSettings.enabled && searchAuthorized && searchSettings.selected.credentialID != nil &&
+            !defaults.bool(forKey: "searchConfigurationEditing") && (try? searchSettings.selected.endpoint()) != nil
+    }
+    var searchStatus: String {
+        guard searchSettings.enabled else { return "关闭后仅使用模型已有知识安排。" }
+        if defaults.bool(forKey: "searchConfigurationEditing") { return "待配置：填写完整后自动保存并启用。" }
+        if searchSettings.selected.credentialID == nil { return "待配置：请填写搜索 API Key。" }
+        if !searchAuthorized { return "在本机开启后才会向所选搜索服务发送搜索词。" }
+        return "已开启 · 帮我安排将按需查询资料。"
+    }
+    func setSearchEnabled(_ enabled: Bool) {
+        searchSettings.enabled = enabled
+        if enabled { authorizeSearch(searchSettings.selected) }
+        persistSearchSettings()
+    }
+    func selectSearchService(_ service: SearchService) {
+        searchSettings.selectedService = service
+        defaults.set(false, forKey: "searchConfigurationEditing")
+        if searchSettings.enabled { authorizeSearch(searchSettings.selected) }
+        persistSearchSettings()
+    }
+    func beginSearchEditing() {
+        defaults.set(true, forKey: "searchConfigurationEditing")
+        objectWillChange.send()
+    }
+    func discardSearchEditing() {
+        defaults.set(false, forKey: "searchConfigurationEditing")
+        objectWillChange.send()
+    }
+    func searchKey(for configuration: SearchConfiguration) throws -> String {
+        guard let id = configuration.credentialID else { return "" }
+        return try KeychainStore.searchKey(id: id, synchronizable: iCloudEnabled)
+    }
+    func saveSearchConfiguration(service: SearchService, key: String) throws {
+        var value = SearchConfiguration(service: service)
+        let cleanKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard cleanKey.count <= 16_384 else { throw ShikeError.message("搜索 API Key 过长。") }
+        let old = searchSettings.configuration(for: service)
+        let oldKey = try searchKey(for: old)
+        if old.credentialID != nil && cleanKey.isEmpty && oldKey.isEmpty {
+            throw ShikeError.message("搜索 API Key 尚未到达，请等待钥匙串同步或重新填写 Key。")
+        }
+        if cleanKey.isEmpty { value.credentialID = nil }
+        else if cleanKey == oldKey { value.credentialID = old.credentialID }
+        else {
+            let id = UUID().uuidString
+            try KeychainStore.saveSearchKey(cleanKey, id: id, synchronizable: iCloudEnabled)
+            value.credentialID = id
+        }
+        searchSettings.set(value)
+        defaults.set(cleanKey.isEmpty, forKey: "searchConfigurationEditing")
+        if searchSettings.enabled { authorizeSearch(value) }
+        persistSearchSettings()
+    }
+    func revokeSearchAuthorization() {
+        defaults.removeObject(forKey: "searchServiceGrants")
+        objectWillChange.send()
+    }
+    private func authorizeSearch(_ configuration: SearchConfiguration) {
+        guard let scope = configuration.authorizationScope else { return }
+        var grants = searchGrants
+        if !grants.contains(scope) { grants.append(scope) }
+        defaults.set(Array(grants.suffix(100)), forKey: "searchServiceGrants")
+    }
+    private func persistSearchSettings() {
+        defaults.set(try? JSONEncoder().encode(searchSettings), forKey: "searchSettings")
+        publishCloudSettings()
+    }
+    private func restoreSearchSettings() {
+        if let data = defaults.data(forKey: "searchSettings"),
+           let settings = try? JSONDecoder().decode(SearchSettings.self, from: data), (try? settings.validate()) != nil {
+            searchSettings = settings
+            defaults.set(try? JSONEncoder().encode(settings), forKey: "searchSettings")
+        } else { searchSettings = SearchSettings() }
+    }
+    private func migrateSearchKeys(toCloud: Bool) throws {
+        var settings = searchSettings
+        for var configuration in settings.configurations {
+            guard let oldID = configuration.credentialID else { continue }
+            let key = try searchKey(for: configuration)
+            guard !key.isEmpty else { throw ShikeError.message("搜索 API Key 尚未到达本机，请稍后再切换同步。") }
+            let id = toCloud ? UUID().uuidString : oldID
+            try KeychainStore.saveSearchKey(key, id: id, synchronizable: toCloud)
+            configuration.credentialID = id; settings.set(configuration)
+        }
+        searchSettings = settings
+        defaults.set(try? JSONEncoder().encode(settings), forKey: "searchSettings")
     }
 }

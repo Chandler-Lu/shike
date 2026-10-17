@@ -20,6 +20,8 @@ public struct PlanningConversation: Codable, Equatable, Sendable {
     public var hasProposal = false
     public var checkedAvailability = false
     public var proposalNeedsUpdate: Bool?
+    public var research: PlanningResearch?
+    public var sourceIDs: [String]?
     public init(goal: String, now: Date = .now, timeZone: TimeZone = .current) {
         self.goal = goal
         var calendar = Calendar(identifier: .gregorian); calendar.timeZone = timeZone
@@ -59,6 +61,8 @@ public struct PlanningReply: Equatable, Sendable {
     public var message: String
     public var options: [String]
     public var drafts: [EventDraft]
+    public var research: PlanningResearch?
+    public var sourceIDs: [String] = []
     public init(kind: Kind, message: String, options: [String] = [], drafts: [EventDraft] = []) {
         self.kind = kind; self.message = message; self.options = options; self.drafts = drafts
     }

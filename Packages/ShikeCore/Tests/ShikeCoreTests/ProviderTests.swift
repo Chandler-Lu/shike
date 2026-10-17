@@ -21,73 +21,65 @@ final class ProviderTests: XCTestCase {
         try await client().extract(text: "明天出差", referenceDate: .now, timeZone: TimeZone(identifier: "Asia/Shanghai")!,
                                    configuration: APIConfiguration(baseURL: "https://proxy.example/custom", model: "fixture-model", format: format), apiKey: "fixture-key")
     }
-    func testProviderEndpointsAndOldConfigurationMigration() throws {
-        let old = try JSONDecoder().decode(APIConfiguration.self, from: Data(#"{"baseURL":"https://example.com","model":"old"}"#.utf8))
+    func testOpenAIEndpointsAndHistoricalFormatMigration() throws {
+        let decoder = JSONDecoder()
+        let old = try decoder.decode(APIConfiguration.self, from: Data(#"{"baseURL":"https://example.com","model":"old"}"#.utf8))
         XCTAssertEqual(old.format, .openAI)
-        XCTAssertEqual(try APIConfiguration(baseURL: "https://proxy.example/custom/messages", model: "a", format: .claude).endpoint().path, "/custom/messages")
-        XCTAssertEqual(try APIConfiguration(baseURL: "https://proxy.example", model: "models/test", format: .gemini).endpoint().path, "/v1beta/models/test:generateContent")
-        XCTAssertEqual(try APIConfiguration(baseURL: "https://proxy.example/proxy/v1beta/models/old:generateContent", model: "new", format: .gemini).endpoint().path, "/proxy/v1beta/models/new:generateContent")
-        XCTAssertEqual(try APIConfiguration(baseURL: "https://proxy.example/custom", format: .gemini).modelsEndpoint().path, "/custom/models")
-        XCTAssertThrowsError(try APIConfiguration(baseURL: "https://proxy.example", model: "../escape", format: .gemini).endpoint())
-    }
-    func testClaudeRequestAndTextBlocks() async throws {
-        MockURLProtocol.handler = { request in
-            XCTAssertEqual(request.url?.path, "/custom/messages")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "x-api-key"), "fixture-key")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "anthropic-version"), "2023-06-01")
-            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
-            let payload = try self.body(request)
-            XCTAssertNotNil(payload["system"]); XCTAssertEqual(payload["max_tokens"] as? Int, 4096)
-            XCTAssertNil(payload["response_format"])
-            return (200, Data(#"{"content":[{"type":"thinking","thinking":"ignored"},{"type":"text","text":"{\"events\":[]}"}],"stop_reason":"end_turn"}"#.utf8))
+        XCTAssertEqual(APIFormat.allCases, [.openAI])
+        for legacy in ["claude", "gemini", "openAI"] {
+            let raw = try JSONSerialization.data(withJSONObject: ["id": "saved-profile", "name": "旧接口", "credentialID": "existing-key-id",
+                "configuration": ["baseURL": "https://proxy.example/custom", "model": "original-model", "format": legacy]])
+            let profile = try decoder.decode(APIProfile.self, from: raw)
+            XCTAssertEqual(profile.id, "saved-profile"); XCTAssertEqual(profile.credentialID, "existing-key-id")
+            XCTAssertEqual(profile.configuration.model, "original-model")
+            XCTAssertEqual(profile.configuration.baseURL, "https://proxy.example/custom")
+            XCTAssertEqual(profile.configuration.format, .openAI)
+            XCTAssertEqual(try profile.configuration.endpoint().path, "/custom/chat/completions")
+            let rewritten = try JSONSerialization.jsonObject(with: JSONEncoder().encode(profile.configuration)) as? [String: String]
+            XCTAssertEqual(rewritten?["format"], "openAI")
         }
-        let result = try await extract(.claude); XCTAssertTrue(result.isEmpty)
+        XCTAssertEqual(try APIConfiguration(baseURL: "https://proxy.example", model: "test").endpoint().path, "/v1/chat/completions")
+        XCTAssertEqual(try APIConfiguration(baseURL: "https://proxy.example/custom/chat/completions/").modelsEndpoint().path, "/custom/models")
+        XCTAssertThrowsError(try decoder.decode(APIFormat.self, from: Data(#""unsupported""#.utf8)))
     }
-    func testGeminiRequestDoesNotPutKeyInURLAndIgnoresThoughts() async throws {
+    func testOpenAIRequestUsesBearerAndChatCompletions() async throws {
         MockURLProtocol.handler = { request in
-            XCTAssertEqual(request.url?.path, "/custom/models/fixture-model:streamGenerateContent")
-            XCTAssertEqual(request.url?.query, "alt=sse")
-            XCTAssertEqual(request.value(forHTTPHeaderField: "x-goog-api-key"), "fixture-key")
-            XCTAssertNil(request.value(forHTTPHeaderField: "Authorization"))
+            XCTAssertEqual(request.url?.path, "/custom/chat/completions")
+            XCTAssertNil(request.url?.query)
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer fixture-key")
+            XCTAssertNil(request.value(forHTTPHeaderField: "x-api-key"))
+            XCTAssertNil(request.value(forHTTPHeaderField: "x-goog-api-key"))
             let payload = try self.body(request)
-            XCTAssertNotNil(payload["systemInstruction"]); XCTAssertNotNil(payload["contents"])
-            XCTAssertEqual((payload["generationConfig"] as? [String: String])?["responseMimeType"], "application/json")
-            return (200, Data(#"{"candidates":[{"content":{"parts":[{"thought":true,"text":"not JSON"},{"text":"{\"events\":[]}"}]},"finishReason":"STOP"}]}"#.utf8))
+            XCTAssertEqual(payload["model"] as? String, "fixture-model")
+            XCTAssertNotNil(payload["messages"])
+            XCTAssertNil(payload["systemInstruction"])
+            return (200, Data(#"{"choices":[{"message":{"content":"{\"events\":[]}"},"finish_reason":"stop"}]}"#.utf8))
         }
-        let result = try await extract(.gemini); XCTAssertTrue(result.isEmpty)
+        let result = try await extract(.openAI); XCTAssertTrue(result.isEmpty)
     }
-    func testNativeProviderTruncationAndRefusalNeverReturnsEvents() async {
-        let responses: [(APIFormat, String)] = [
-            (.claude, #"{"content":[{"type":"text","text":"{\"events\":[]}"}],"stop_reason":"max_tokens"}"#),
-            (.gemini, #"{"candidates":[{"content":{"parts":[{"text":"{\"events\":[]}"}]},"finishReason":"MAX_TOKENS"}]}"#),
-            (.gemini, #"{"promptFeedback":{"blockReason":"SAFETY"}}"#)
-        ]
-        for (format, response) in responses {
+    func testTruncationAndRefusalNeverReturnEvents() async {
+        for response in [
+            #"{"choices":[{"message":{"content":"{\"events\":[]}"},"finish_reason":"length"}]}"#,
+            #"{"choices":[{"message":{"refusal":"blocked"},"finish_reason":"stop"}]}"#
+        ] {
             MockURLProtocol.handler = { _ in (200, Data(response.utf8)) }
-            do { _ = try await extract(format); XCTFail("Should reject incomplete/blocked output") } catch { }
+            do { _ = try await extract(.openAI); XCTFail("Should reject incomplete/blocked output") } catch { }
         }
     }
-    func testClaudeAndGeminiModelPagination() async throws {
-        for format in [APIFormat.claude, .gemini] {
-            var count = 0
-            MockURLProtocol.handler = { request in
-                count += 1
-                if count == 2 {
-                    let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
-                    XCTAssertEqual(query?.first?.name, format == .claude ? "after_id" : "pageToken")
-                    XCTAssertEqual(query?.first?.value, "next/token")
-                }
-                let response: String
-                if format == .claude {
-                    response = count == 1 ? #"{"data":[{"id":"first"}],"has_more":true,"last_id":"next/token"}"# : #"{"data":[{"id":"second"}],"has_more":false}"#
-                } else {
-                    response = count == 1 ? #"{"models":[{"name":"models/first","displayName":"First"}],"nextPageToken":"next/token"}"# : #"{"models":[{"name":"models/second"}]}"#
-                }
-                return (200, Data(response.utf8))
+    func testOpenAIModelPagination() async throws {
+        var count = 0
+        MockURLProtocol.handler = { request in
+            count += 1
+            if count == 2 {
+                let query = URLComponents(url: request.url!, resolvingAgainstBaseURL: false)?.queryItems
+                XCTAssertEqual(query?.first?.name, "after")
+                XCTAssertEqual(query?.first?.value, "next/token")
             }
-            let result = try await client().listModels(configuration: APIConfiguration(baseURL: "https://example.com", format: format), apiKey: "fixture")
-            XCTAssertEqual(result.map(\.id), ["first", "second"]); XCTAssertEqual(count, 2)
+            let response = count == 1 ? #"{"data":[{"id":"first"}],"has_more":true,"last_id":"next/token"}"# : #"{"data":[{"id":"second"}],"has_more":false}"#
+            return (200, Data(response.utf8))
         }
+        let result = try await client().listModels(configuration: APIConfiguration(baseURL: "https://example.com"), apiKey: "fixture")
+        XCTAssertEqual(result.map(\.id), ["first", "second"]); XCTAssertEqual(count, 2)
     }
     func testForcedCategoryAndCalendarCandidateAllowList() async throws {
         MockURLProtocol.handler = { request in

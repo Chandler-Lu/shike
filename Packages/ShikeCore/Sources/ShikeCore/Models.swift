@@ -1,10 +1,18 @@
 import Foundation
 
 public enum APIFormat: String, Codable, CaseIterable, Identifiable, Sendable {
-    case openAI, claude, gemini
+    case openAI
     public var id: String { rawValue }
-    public var title: String {
-        switch self { case .openAI: return "OpenAI"; case .claude: return "Claude"; case .gemini: return "Gemini" }
+    public var title: String { "OpenAI" }
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        let value = try container.decode(String.self)
+        // Read historical profiles, cloud settings and backups without dropping their credentials.
+        guard ["openAI", "claude", "gemini"].contains(value) else {
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Unknown API format")
+        }
+        self = .openAI
     }
 }
 
@@ -36,32 +44,14 @@ public struct APIConfiguration: Codable, Equatable, Sendable {
         var path = parts.path
         while path.hasSuffix("/") { path.removeLast() }
         let rootWasEmpty = path.isEmpty
-        switch format {
-        case .openAI:
-            if path.hasSuffix("/chat/completions") { path.removeLast("/chat/completions".count) }
-        case .claude:
-            if path.hasSuffix("/messages") { path.removeLast("/messages".count) }
-        case .gemini:
-            if let range = path.range(of: "/models/") { path = String(path[..<range.lowerBound]) }
-            else if path.hasSuffix("/models") { path.removeLast("/models".count) }
-        }
-        if rootWasEmpty { path = format == .gemini ? "/v1beta" : "/v1" }
+        if path.hasSuffix("/chat/completions") { path.removeLast("/chat/completions".count) }
+        if rootWasEmpty { path = "/v1" }
         parts.path = path
         return parts
     }
     public func endpoint() throws -> URL {
         var parts = try baseComponents()
-        switch format {
-        case .openAI: parts.path += "/chat/completions"
-        case .claude: parts.path += "/messages"
-        case .gemini:
-            let model = model.trimmingCharacters(in: .whitespacesAndNewlines)
-            let id = model.hasPrefix("models/") ? String(model.dropFirst(7)) : model
-            guard !id.isEmpty, id.range(of: #"^[A-Za-z0-9._-]+$"#, options: .regularExpression) != nil else {
-                throw ShikeError.message("请填写有效的 Gemini 模型 ID，可带 models/ 前缀。")
-            }
-            parts.path += "/models/\(id):generateContent"
-        }
+        parts.path += "/chat/completions"
         guard let url = parts.url else { throw ShikeError.message("接口地址无效。") }
         return url
     }
@@ -158,6 +148,7 @@ public struct CloudSettingsSnapshot: Codable, Equatable, Sendable {
     public var activeProfileID: String?
     public var calendarPreferences: CalendarPreferences?
     public var promptSettings: PromptSettings?
+    public var searchSettings: SearchSettings?
     public init(configuration: APIConfiguration, credentialID: String?, defaultCalendar: CalendarReference?,
                 categoryRoutingEnabled: Bool, categoryCalendars: [String: CalendarReference],
                 profiles: [APIProfile]? = nil, activeProfileID: String? = nil) {

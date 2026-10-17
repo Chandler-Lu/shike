@@ -586,6 +586,13 @@ extension ImportController {
         do { key = AppIdentity.usesFixtureModel ? "" : try profile.map { try preferences.profileKey($0) } ?? "" }
         catch { errorMessage = error.localizedDescription; return }
         let inputSession = session, prompts = preferences.promptSettings
+        let planningConsent: ExtractionConsent?
+        do { planningConsent = try currentConsentScope() }
+        catch { errorMessage = error.localizedDescription; return }
+        let searchConfiguration = preferences.searchReady ? preferences.searchSettings.selected : nil
+        let searchKey: String
+        do { searchKey = try searchConfiguration.map { try preferences.searchKey(for: $0) } ?? "" }
+        catch { searchKey = ""; information = "搜索 Key 暂不可读取，本次先使用模型已有知识安排。" }
         let calendars = preferences.categoryRoutingEnabled ? environment.calendars.calendars : []
         let candidates = calendars.enumerated().map { CalendarCandidate(id: "calendar-\($0.offset)", name: $0.element.title) }
         let identifiers = Dictionary(uniqueKeysWithValues: zip(candidates.map(\.id), calendars.map(\.id)))
@@ -614,6 +621,35 @@ extension ImportController {
                     throw ShikeError.message("发送范围有变化，请确认后继续。")
                 }
                 let reply: PlanningReply
+                let research: PlanningResearchRuntime?
+                if let searchConfiguration {
+                    let allowed: @Sendable () async -> Bool = { @MainActor in
+                        preferences.searchReady && preferences.searchSettings.selected == searchConfiguration
+                    }
+                    if searchKey.isEmpty {
+                        research = nil
+                        information = "搜索 API Key 尚未同步到本机，本次先使用模型已有知识安排。"
+                    } else {
+                        research = PlanningResearchRuntime(tools: SearchAPIClient(configuration: searchConfiguration, apiKey: searchKey, isAllowed: allowed),
+                            isAllowed: allowed, checkpoint: { @MainActor [weak self] value in
+                                try Task.checkCancellation()
+                                guard let self, self.session.id == inputSession.id, self.isBusy else { throw CancellationError() }
+                                self.session.planning?.research = value
+                                try self.persist()
+                            }, beforeModel: { @MainActor [weak self] in
+                                guard let self, self.session.id == inputSession.id, self.isBusy else { throw CancellationError() }
+                                guard (preferences.activeProfile?.configuration ?? preferences.configuration) == configuration else {
+                                    throw ShikeError.message("模型接口已变化，请重新发起安排。")
+                                }
+                                if let scope = planningConsent, !self.environment.consent.allows(scope) {
+                                    throw ShikeError.message("模型发送授权已撤销，已有问答和资料已保留。")
+                                }
+                            })
+                    }
+                } else {
+                    research = nil
+                    if preferences.searchSettings.enabled { information = "联网搜索待配置或待本机授权，本次先使用模型已有知识安排。" }
+                }
                 #if DEBUG
                 if AppIdentity.usesFixtureModel {
                     try await Task.sleep(for: .milliseconds(300))
@@ -621,18 +657,20 @@ extension ImportController {
                 } else {
                     reply = try await environment.llmClient.plan(conversation: conversation, drafts: inputSession.drafts, timeZone: zone,
                         referenceDate: now, available: free, configuration: configuration, apiKey: key,
-                        calendars: candidates, forcedCategory: inputSession.forcedCategory, prompts: prompts, observer: context.observer(modelObserver()))
+                        calendars: candidates, forcedCategory: inputSession.forcedCategory, prompts: prompts, observer: context.observer(modelObserver()), research: research)
                 }
                 #else
                 reply = try await environment.llmClient.plan(conversation: conversation, drafts: inputSession.drafts, timeZone: zone,
                     referenceDate: now, available: free, configuration: configuration, apiKey: key,
-                    calendars: candidates, forcedCategory: inputSession.forcedCategory, prompts: prompts, observer: context.observer(modelObserver()))
+                    calendars: candidates, forcedCategory: inputSession.forcedCategory, prompts: prompts, observer: context.observer(modelObserver()), research: research)
                 #endif
                 try Task.checkCancellation()
                 var updated = session
                 conversation.turns.append(PlanningTurn(role: "assistant", text: reply.message, options: reply.options))
                 conversation.awaitingReply = false
                 conversation.checkedAvailability = events != nil
+                conversation.research = reply.research ?? session.planning?.research
+                conversation.sourceIDs = reply.sourceIDs
                 if reply.kind == .proposal {
                     conversation.hasProposal = true
                     conversation.proposalNeedsUpdate = false

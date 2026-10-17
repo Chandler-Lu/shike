@@ -14,7 +14,7 @@ struct ExtractionConsent: Codable, Equatable, Identifiable {
 
     init(configuration: APIConfiguration, includesCalendarNames: Bool, includesPlanning: Bool = false, includesAvailability: Bool = false) throws {
         // Normalize roots and full extraction URLs through the same code as actual requests.
-        // A Gemini model change must not look like a new recipient; a proxy path change must.
+        // A model change must not look like a new recipient; a proxy path change must.
         var parts = URLComponents(url: try configuration.modelsEndpoint(), resolvingAgainstBaseURL: false)!
         parts.path = String(parts.path.dropLast("/models".count))
         parts.host = parts.host?.lowercased()

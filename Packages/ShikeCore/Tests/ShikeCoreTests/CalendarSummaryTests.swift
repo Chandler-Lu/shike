@@ -28,8 +28,6 @@ final class CalendarSummaryTests: XCTestCase {
                 let envelope: [String: Any]
                 switch format {
                 case .openAI: envelope = ["choices": [["message": ["content": result], "finish_reason": "stop"]]]
-                case .claude: envelope = ["content": [["type": "text", "text": result]], "stop_reason": "end_turn"]
-                case .gemini: envelope = ["candidates": [["content": ["parts": [["text": result]]], "finishReason": "STOP"]]]
                 }
                 return (200, try JSONSerialization.data(withJSONObject: envelope))
             }
@@ -63,7 +61,7 @@ final class CalendarSummaryTests: XCTestCase {
         XCTAssertFalse(markdown.contains("需要留意"))
         XCTAssertThrowsError(try CalendarSummary.decode(#"{"overview":"","agenda":[],"attention":[],"suggestions":[]}"#))
     }
-    func testSummaryUsesAllThreeAPIFormatsAndEmptyCalendarNeedsNoService() async throws {
+    func testSummaryUsesOpenAIAndEmptyCalendarNeedsNoService() async throws {
         defer { MockURLProtocol.handler = nil }
         let configuration = URLSessionConfiguration.ephemeral; configuration.protocolClasses = [MockURLProtocol.self]
         let client = LLMClient(session: URLSession(configuration: configuration))
@@ -83,8 +81,6 @@ final class CalendarSummaryTests: XCTestCase {
                 let envelope: [String: Any]
                 switch format {
                 case .openAI: envelope = ["choices": [["message": ["content": result], "finish_reason": "stop"]]]
-                case .claude: envelope = ["content": [["type": "text", "text": result]], "stop_reason": "end_turn"]
-                case .gemini: envelope = ["candidates": [["content": ["parts": [["text": result]]], "finishReason": "STOP"]]]
                 }
                 return (200, try JSONSerialization.data(withJSONObject: envelope))
             }

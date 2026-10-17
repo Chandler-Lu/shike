@@ -20,10 +20,12 @@ public struct AppDataExport: Codable, Sendable {
         public let categoryCalendars: [String: CalendarReference]
         public let activeProfileID: String
         public let calendar: CalendarDisplay
-        public init(iCloudEnabled: Bool, categoryRoutingEnabled: Bool, defaultCalendar: CalendarReference?, categoryCalendars: [String: CalendarReference], activeProfileID: String, calendar: CalendarPreferences) {
+        public let search: SearchSettings?
+        public init(iCloudEnabled: Bool, categoryRoutingEnabled: Bool, defaultCalendar: CalendarReference?, categoryCalendars: [String: CalendarReference], activeProfileID: String, calendar: CalendarPreferences, search: SearchSettings? = nil) {
             self.iCloudEnabled = iCloudEnabled; self.categoryRoutingEnabled = categoryRoutingEnabled
             self.defaultCalendar = defaultCalendar; self.categoryCalendars = categoryCalendars; self.activeProfileID = activeProfileID
             self.calendar = CalendarDisplay(visibleDays: calendar.visibleDays, visibleCalendars: calendar.visibleCalendars, planningCalendars: calendar.planningCalendars, timeZoneIdentifier: calendar.timeZoneIdentifier, showCountdowns: calendar.showCountdowns ?? true, countdownLayout: calendar.countdownLayout ?? .single)
+            self.search = search?.withoutCredentials
         }
     }
     public struct CalendarDisplay: Codable, Sendable {
@@ -117,10 +119,13 @@ public struct AppDataExport: Codable, Sendable {
         public let hasProposal: Bool
         public let checkedAvailability: Bool
         public let proposalNeedsUpdate: Bool
+        public let research: PlanningResearch?
+        public let sourceIDs: [String]?
         init(_ v: PlanningConversation) {
             goal = v.goal; turns = v.turns.map { Turn(id: $0.id, role: $0.role, text: $0.text, options: $0.options) }
             start = v.start; end = v.end; awaitingReply = v.awaitingReply; hasProposal = v.hasProposal
             checkedAvailability = v.checkedAvailability; proposalNeedsUpdate = v.proposalNeedsUpdate ?? false
+            research = v.research; sourceIDs = v.sourceIDs
         }
     }
     public struct Session: Codable, Sendable {

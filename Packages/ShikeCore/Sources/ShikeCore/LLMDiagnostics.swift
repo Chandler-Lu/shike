@@ -1,7 +1,7 @@
 import Foundation
 
 public struct LLMProgress: Sendable {
-    public enum Stage: String, Sendable { case preparing, connecting, waiting, thinking, receiving, parsing }
+    public enum Stage: String, Sendable { case preparing, connecting, waiting, thinking, receiving, parsing, searching, reading, arranging }
     public let stage: Stage
     public let elapsed: TimeInterval
     public let attempt: Int
@@ -15,6 +15,9 @@ public struct LLMProgress: Sendable {
         case .thinking: label = "模型正在思考"
         case .receiving: label = "正在接收模型回复"
         case .parsing: label = "正在整理结果"
+        case .searching: label = "正在查找资料"
+        case .reading: label = "正在读取网页"
+        case .arranging: label = "正在整理安排"
         }
         return "\(label) · \(Int(elapsed)) 秒" + (attempt > 1 ? " · 兼容请求 \(attempt)" : "")
     }

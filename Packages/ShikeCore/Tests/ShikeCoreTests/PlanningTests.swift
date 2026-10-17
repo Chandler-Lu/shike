@@ -28,10 +28,7 @@ final class PlanningTests: XCTestCase {
                     XCTAssertTrue(raw.contains("不能用它标记未经换算的当地时间"))
                     let body = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
                     let input: String
-                    if format == .gemini {
-                        let contents = try XCTUnwrap(body["contents"] as? [[String: Any]])
-                        input = try XCTUnwrap((contents.first?["parts"] as? [[String: String]])?.first?["text"])
-                    } else { input = try XCTUnwrap((body["messages"] as? [[String: String]])?.last?["content"]) }
+                    input = try XCTUnwrap((body["messages"] as? [[String: String]])?.last?["content"])
                     let payload = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(input.utf8)) as? [String: Any])
                     XCTAssertEqual(payload["now"] as? String, now)
                     XCTAssertEqual(payload["rangeEndExclusive"] as? String, rangeEnd)
@@ -46,8 +43,6 @@ final class PlanningTests: XCTestCase {
                     let envelope: [String: Any]
                     switch format {
                     case .openAI: envelope = ["choices": [["message": ["content": content], "finish_reason": "stop"]]]
-                    case .claude: envelope = ["content": [["type": "text", "text": content]], "stop_reason": "end_turn"]
-                    case .gemini: envelope = ["candidates": [["content": ["parts": [["text": content]]], "finishReason": "STOP"]]]
                     }
                     return (200, try JSONSerialization.data(withJSONObject: envelope))
                 }
@@ -99,8 +94,6 @@ final class PlanningTests: XCTestCase {
                     let envelope: [String: Any]
                     switch format {
                     case .openAI: envelope = ["choices": [["message": ["content": content], "finish_reason": "stop"]]]
-                    case .claude: envelope = ["content": [["type": "text", "text": content]], "stop_reason": "end_turn"]
-                    case .gemini: envelope = ["candidates": [["content": ["parts": [["text": content]]], "finishReason": "STOP"]]]
                     }
                     return (200, try JSONSerialization.data(withJSONObject: envelope))
                 }
@@ -193,13 +186,11 @@ final class PlanningTests: XCTestCase {
                 XCTAssertTrue(raw.contains("自定义安排偏好"))
                 XCTAssertTrue(raw.contains("全天日程不占用时间"), "自定义提示词也必须保留应用的全天占用规则")
                 XCTAssertFalse(raw.contains("private-calendar-id")); XCTAssertFalse(raw.contains("private-event-id"))
-                XCTAssertEqual(request.url?.query, format == .gemini ? "alt=sse" : nil)
+                XCTAssertEqual(request.url?.query, nil)
                 let content = #"{"kind":"question","message":"晚上几点方便？","options":["七点","八点"]}"#
                 let envelope: [String: Any]
                 switch format {
                 case .openAI: envelope = ["choices": [["message": ["content": content], "finish_reason": "stop"]]]
-                case .claude: envelope = ["content": [["type": "text", "text": content]], "stop_reason": "end_turn"]
-                case .gemini: envelope = ["candidates": [["content": ["parts": [["text": content]]], "finishReason": "STOP"]]]
                 }
                 return (200, try JSONSerialization.data(withJSONObject: envelope))
             }

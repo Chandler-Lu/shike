@@ -9,6 +9,7 @@ public struct AppDataImport: Sendable {
         do { backup = try decoder.decode(AppDataExport.self, from: data) }
         catch { throw ShikeError.message("无法读取拾刻 JSON 备份，文件可能不完整或格式不正确。") }
         guard backup.format == "shike-export", backup.schemaVersion == 1 else { throw ShikeError.message("此备份版本暂不支持，请更新拾刻后重试。") }
+        try backup.preferences.search?.validate()
         guard backup.countdowns.count <= 10_000, backup.countdownCategories.count <= 500, backup.importSessions.count <= 10_000,
               backup.apiProfiles.count <= 100,
               Set(backup.countdowns.map(\.id)).count == backup.countdowns.count,
@@ -45,6 +46,8 @@ public struct AppDataImport: Sendable {
                 throw ShikeError.message("备份中的日程记录无效。")
             }
             if let p = session.planning {
+                try p.research?.validate()
+                guard (p.sourceIDs?.count ?? 0) <= 16 else { throw ShikeError.message("规划参考资料数量过多。") }
                 guard p.turns.count <= 10_000, p.end > p.start else { throw ShikeError.message("备份中的问答记录无效。") }
             }
         }
@@ -81,6 +84,8 @@ public struct AppDataImport: Sendable {
                 planning.start = source.start; planning.end = source.end; planning.awaitingReply = source.awaitingReply
                 planning.hasProposal = source.hasProposal; planning.checkedAvailability = false
                 planning.proposalNeedsUpdate = true
+                planning.research = source.research
+                planning.sourceIDs = source.sourceIDs?.filter { id in source.research?.sources.contains { $0.id == id } == true }
                 planning.turns = source.turns.map { source in
                     var turn = PlanningTurn(role: source.role, text: source.text, options: source.options); turn.id = source.id; return turn
                 }

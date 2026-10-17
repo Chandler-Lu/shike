@@ -93,38 +93,24 @@ final class LLMStreamingTests: XCTestCase {
         XCTAssertFalse(result.contains("private reasoning"))
     }
 
-    func testAllProtocolsStreamAndPreserveNativeEndpoints() async throws {
-        for format in [APIFormat.openAI, .claude, .gemini] {
-            let bytes: Data
-            switch format {
-            case .openAI: bytes = try openAI()
-            case .claude:
-                bytes = try event(["type": "ping"]) + event(["type": "content_block_delta", "delta": ["type": "thinking_delta", "thinking": "hidden"]]) +
-                    event(["type": "content_block_delta", "delta": ["type": "text_delta", "text": "{\"events\":[]}"]]) +
-                    event(["type": "message_delta", "delta": ["stop_reason": "end_turn"]]) + event(["type": "message_stop"])
-            case .gemini:
-                bytes = try event(["candidates": [["content": ["parts": [["text": "hidden", "thought": true], ["text": "{\"events\":[]}"]]], "finishReason": "STOP"]]])
-            }
-            ChunkedProtocol.handler = { request in
-                let body = try self.requestBody(request)
-                if format == .gemini {
-                    XCTAssertEqual(request.url?.path, "/custom/models/fixture:streamGenerateContent")
-                    XCTAssertEqual(request.url?.query, "alt=sse")
-                } else { XCTAssertEqual(body["stream"] as? Bool, true) }
-                return .init(chunks: [(0, bytes)])
-            }
-            let updates = RecordedUpdates()
-            let result = try await extract(client(), format: format, updates: updates)
-            XCTAssertTrue(result.isEmpty)
-            XCTAssertEqual(updates.report?.outcome, "成功")
-            XCTAssertNotNil(updates.report?.attempts.first?.firstByte)
-            XCTAssertNotNil(updates.report?.attempts.first?.firstText)
-            XCTAssertNotNil(updates.report?.attempts.first?.responseHeaders)
-            XCTAssertEqual(updates.report?.attempts.first?.reasoningCharacters, format == .openAI ? 0 : 6)
-            if format != .openAI { XCTAssertNotNil(updates.report?.attempts.first?.firstReasoning) }
-            XCTAssertFalse(updates.report?.text.contains("private") ?? true)
-            XCTAssertFalse(updates.report?.text.contains("hidden") ?? true)
+    func testOpenAIStreamsAndPreservesCustomEndpoint() async throws {
+        let bytes = try openAI()
+        ChunkedProtocol.handler = { request in
+            let body = try self.requestBody(request)
+            XCTAssertEqual(request.url?.path, "/custom/chat/completions")
+            XCTAssertNil(request.url?.query)
+            XCTAssertEqual(body["stream"] as? Bool, true)
+            return .init(chunks: [(0, bytes)])
         }
+        let updates = RecordedUpdates()
+        let result = try await extract(client(), updates: updates)
+        XCTAssertTrue(result.isEmpty)
+        XCTAssertEqual(updates.report?.outcome, "成功")
+        XCTAssertNotNil(updates.report?.attempts.first?.firstByte)
+        XCTAssertNotNil(updates.report?.attempts.first?.firstText)
+        XCTAssertNotNil(updates.report?.attempts.first?.responseHeaders)
+        XCTAssertEqual(updates.report?.attempts.first?.reasoningCharacters, 0)
+        XCTAssertFalse(updates.report?.text.contains("private") ?? true)
     }
 
     func testReasoningProgressIsSeparateFromAnswerAndNeverExposesContent() async throws {

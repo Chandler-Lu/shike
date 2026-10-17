@@ -110,8 +110,6 @@ final class StructuredOutputTests: XCTestCase {
                 let response: [String: Any]
                 switch format {
                 case .openAI: response = ["choices": [["message": ["content": content], "finish_reason": "stop"]]]
-                case .claude: response = ["content": [["type": "text", "text": content]], "stop_reason": "end_turn"]
-                case .gemini: response = ["candidates": [["content": ["parts": [["text": content]]], "finishReason": "STOP"]]]
                 }
                 return (200, try JSONSerialization.data(withJSONObject: response))
             }

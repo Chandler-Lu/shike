@@ -175,6 +175,9 @@
         },
         "calendar": {
           "$ref": "#/$defs/calendarDisplay"
+        },
+        "search": {
+          "$ref": "#/$defs/searchSettings"
         }
       },
       "required": [
@@ -200,6 +203,7 @@
         },
         "format": {
           "type": "string",
+          "description": "新导出固定为 openAI；历史 claude、gemini 值在导入时迁移为 openAI。",
           "enum": [
             "openAI",
             "claude",
@@ -590,6 +594,17 @@
         },
         "proposalNeedsUpdate": {
           "type": "boolean"
+        },
+        "research": {
+          "$ref": "#/$defs/planningResearch"
+        },
+        "sourceIDs": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "maxItems": 16
         }
       },
       "required": [
@@ -660,6 +675,138 @@
         "text",
         "hasParsed",
         "drafts"
+      ]
+    },
+    "searchSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean"
+        },
+        "selectedService": {
+          "type": "string",
+          "enum": [
+            "bocha",
+            "tavily"
+          ]
+        },
+        "configurations": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "service": {
+                "type": "string",
+                "enum": [
+                  "bocha",
+                  "tavily"
+                ]
+              },
+              "baseURL": {
+                "type": "string",
+                "maxLength": 2048,
+                "description": "由搜索服务固定的官方地址；恢复时忽略历史自定义地址。"
+              }
+            },
+            "required": [
+              "service",
+              "baseURL"
+            ]
+          },
+          "maxItems": 2
+        }
+      },
+      "required": [
+        "enabled",
+        "selectedService",
+        "configurations"
+      ]
+    },
+    "planningSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 100
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 200
+        },
+        "url": {
+          "type": "string",
+          "format": "uri",
+          "maxLength": 4096
+        },
+        "content": {
+          "type": "string",
+          "maxLength": 6000
+        },
+        "kind": {
+          "enum": [
+            "summary",
+            "page"
+          ]
+        },
+        "retrievedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "id",
+        "title",
+        "url",
+        "content",
+        "kind",
+        "retrievedAt"
+      ]
+    },
+    "planningResearch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/planningSource"
+          },
+          "maxItems": 16
+        },
+        "queries": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "maxItems": 20
+        },
+        "warnings": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "maxItems": 10
+        },
+        "contextKey": {
+          "type": "string",
+          "maxLength": 32000
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "sources",
+        "queries",
+        "warnings",
+        "contextKey",
+        "updatedAt"
       ]
     }
   }

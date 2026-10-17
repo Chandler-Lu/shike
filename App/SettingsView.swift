@@ -39,6 +39,8 @@ struct SettingsView: View {
                     PaperCard {
                         DisclosureGroup(isExpanded: $apiExpanded) {
                             ModelAPISettingsView(preferences: preferences).padding(.top, 18)
+                            Divider().padding(.vertical, 12)
+                            SearchAPISettingsView(preferences: preferences)
                         } label: {
                             VStack(alignment: .leading, spacing: 7) {
                                 Label("模型与 API", systemImage: "sparkle").font(Notebook.handwriting(23))
@@ -64,12 +66,13 @@ struct SettingsView: View {
                             Text("草稿与导入记录保存在本机；开启云端备份后，JSON 副本会保存到 iCloud Drive。系统日历的同步由你配置的日历账户负责。")
                             Text("语音由系统转写，优先在设备上识别，不保存录音。")
                             NavigationLink("隐私政策") { LegalDocumentView() }.frame(minHeight: 44).accessibilityIdentifier("privacyPolicy")
-                            NavigationLink("字体许可") { LegalDocumentView(showsFontLicense: true) }.frame(minHeight: 44)
+                            NavigationLink("开源许可") { LegalDocumentView(showsFontLicense: true) }.frame(minHeight: 44)
                             Link("帮助与支持", destination: AppLegal.supportURL).frame(minHeight: 44)
                             Link("联系作者", destination: AppLegal.emailURL).frame(minHeight: 44)
-                            Button("撤销模型发送授权") {
+                            Button("撤销模型与搜索授权") {
                                 environment.consent.revokeAll()
-                                consentMessage = "已撤销。本设备下次提取时会重新询问；已经发送的内容无法撤回。"
+                                preferences.revokeSearchAuthorization()
+                                consentMessage = "已撤销。模型发送会重新询问，联网搜索需在设置中重新开启；已经发送的内容无法撤回。"
                             }.frame(minHeight: 44).accessibilityIdentifier("revokeExtractionConsent")
                             if let consentMessage { Text(consentMessage).font(.caption) }
                         }.font(.subheadline).foregroundStyle(Notebook.secondaryInk).padding(.top, 12)
@@ -110,6 +113,10 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Label("在输入框中说下安排", systemImage: "mic").foregroundStyle(Notebook.ink)
                     Text("点击首页输入框右下角、放大按钮左侧的麦克风，即可开始录音，转写文字会直接追加到原文，再点一次停止。")
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    Label("联网安排", systemImage: "globe").foregroundStyle(Notebook.ink)
+                    Text("在“模型与 API”中开启联网搜索，选择博查或 Tavily 并填写搜索 Key，完成后自动保存。照常使用“帮我安排”，需要外部信息时会自动查询，方案下方可查看参考资料。关闭搜索不影响原有安排功能。")
                 }
             }.font(.subheadline).foregroundStyle(Notebook.secondaryInk).padding(.top, 12)
         } label: {
@@ -234,6 +241,120 @@ struct SettingsView: View {
                 }
             }
             .pickerStyle(.menu).font(.subheadline).tint(Notebook.accent)
+        }
+    }
+}
+
+/// Search belongs to API settings; the planning entry and composer have no extra controls.
+private struct SearchAPISettingsView: View {
+    @ObservedObject var preferences: Preferences
+    @State private var key = ""
+    @State private var loaded = false
+    @State private var dirty = false
+    @State private var keyLoaded = false
+    @State private var message: String?
+    @State private var isError = false
+    @State private var pendingSave: Task<Void, Never>?
+    @State private var testTask: Task<Void, Never>?
+    @State private var testing = false
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 14) {
+                Text("联网搜索")
+                Spacer(minLength: 12)
+                Toggle("联网搜索", isOn: Binding(get: { preferences.searchSettings.enabled }, set: { enabled in
+                    flush(); testTask?.cancel(); testing = false
+                    preferences.setSearchEnabled(enabled)
+                })).labelsHidden().toggleStyle(.switch).fixedSize().tint(Notebook.accent)
+                    .accessibilityIdentifier("searchEnabled")
+            }
+            Text("所有模型接口共用。开启后，帮我安排会按需发送必要搜索词，并读取公开网页；不发送已有日历事件。搜索服务可能单独收费。")
+                .font(.caption).foregroundStyle(Notebook.secondaryInk)
+            if preferences.searchSettings.enabled {
+                Picker("搜索服务", selection: Binding(get: { preferences.searchSettings.selectedService }, set: { service in
+                    guard flush() else { return }
+                    testTask?.cancel(); testing = false
+                    preferences.selectSearchService(service); load()
+                })) {
+                    ForEach(SearchService.allCases) { Text($0.title).tag($0) }
+                }.pickerStyle(.segmented).accessibilityIdentifier("searchService")
+                Text("搜索 API Key").font(.caption.weight(.medium))
+                SecureField("填写搜索服务的 API Key", text: Binding(get: { key }, set: {
+                    key = $0; keyLoaded = true; changed()
+                })).focused($focused).accessibilityIdentifier("searchKey")
+                Text(!dirty && preferences.searchSettings.selected.credentialID != nil && key.isEmpty ? "搜索 Key 尚未到达或暂不可读取，请稍后重新打开设置。" : preferences.searchStatus).font(.caption).foregroundStyle(Notebook.secondaryInk)
+                    .accessibilityIdentifier("searchStatus")
+                if !preferences.searchAuthorized, preferences.searchSettings.selected.credentialID != nil {
+                    Button("在本机开启") { preferences.setSearchEnabled(true) }
+                        .buttonStyle(InkButtonStyle(prominent: false)).accessibilityIdentifier("authorizeSearch")
+                }
+                Button {
+                    if testing { testTask?.cancel(); testing = false }
+                    else { test() }
+                } label: {
+                    HStack { if testing { ProgressView() }; Text(testing ? "取消测试" : "测试搜索") }
+                }.buttonStyle(InkButtonStyle(prominent: false))
+                    .disabled(!testing && key.isEmpty).accessibilityIdentifier("testSearch")
+                Text("使用所选服务的官方接口，填写 Key 后自动保存并启用。Key 使用系统钥匙串，跟随 iCloud 同步设置；测试仅发送一条公开示例搜索词。")
+                    .font(.caption).foregroundStyle(Notebook.secondaryInk)
+                if let message { NoteMessage(text: message, isError: isError).accessibilityIdentifier("searchMessage") }
+            }
+        }.textInputAutocapitalization(.never).autocorrectionDisabled()
+            .toolbar { ToolbarItemGroup(placement: .keyboard) { if focused { Spacer(); Button("收起键盘") { focused = false } } } }
+            .onAppear { if !loaded { load(); loaded = true } }
+            .onDisappear { flush(); testTask?.cancel() }
+            .onChange(of: focused) { _, focused in if !focused { flush() } }
+            .onChange(of: preferences.syncRevision) { _, _ in
+                if !dirty && !testing { load() }
+                else { message = "iCloud 配置已更新，当前输入已保留。" }
+            }
+    }
+    private func load() {
+        preferences.discardSearchEditing()
+        do { key = try preferences.searchKey(for: preferences.searchSettings.selected); keyLoaded = true; message = nil }
+        catch { key = ""; keyLoaded = false; message = error.localizedDescription; isError = true }
+        dirty = false
+    }
+    private func changed() {
+        dirty = true; preferences.beginSearchEditing()
+        testTask?.cancel(); testing = false; message = nil
+        pendingSave?.cancel()
+        pendingSave = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(800)); try Task.checkCancellation() }
+            catch { return }
+            save()
+        }
+    }
+    @discardableResult private func flush() -> Bool {
+        pendingSave?.cancel(); pendingSave = nil
+        return save()
+    }
+    @discardableResult private func save() -> Bool {
+        guard dirty else { return true }
+        do {
+            guard keyLoaded else { throw ShikeError.message("搜索 Key 尚不可读取，请解锁设备或重新填写后保存。") }
+            try preferences.saveSearchConfiguration(service: preferences.searchSettings.selectedService, key: key)
+            dirty = false; message = nil; isError = false
+            return true
+        } catch { message = error.localizedDescription; isError = true; return false }
+    }
+    private func test() {
+        focused = false
+        guard flush() else { return }
+        let configuration = preferences.searchSettings.selected, savedKey = key
+        testing = true; message = nil
+        testTask = Task { @MainActor in
+            do {
+                let results = try await SearchAPIClient(configuration: configuration, apiKey: savedKey).search("中国国家博物馆 官方网站")
+                try Task.checkCancellation()
+                isError = false; message = "搜索连接成功，收到 \(results.count) 条资料。"
+            } catch {
+                if Task.isCancelled { return }
+                isError = true; message = error.localizedDescription
+            }
+            testing = false
         }
     }
 }
@@ -375,6 +496,7 @@ private struct CatReactionMask: Shape {
 
 private struct ModelAPISettingsView: View {
     @ObservedObject var preferences: Preferences
+    @Environment(\.scenePhase) private var scenePhase
     @State private var configuration = APIConfiguration()
     @State private var key = ""
     @State private var loaded = false
@@ -395,9 +517,10 @@ private struct ModelAPISettingsView: View {
     @State private var profileID: String?
     @State private var profileName = ""
     @State private var savedName = ""
+    @State private var handledRevision = UUID()
     private enum ProfileAction { case select(String), createBlank, duplicate(String) }
-    @State private var pendingProfileAction: ProfileAction?
-    @State private var confirmSwitch = false
+    @State private var pendingSave: Task<Void, Never>?
+    @State private var saveError: String?
     @State private var confirmDelete = false
     @FocusState private var inputFocused: Bool
 
@@ -428,16 +551,13 @@ private struct ModelAPISettingsView: View {
                 }.padding(.vertical, 5).contentShape(Rectangle())
             }.disabled(isBusy).accessibilityIdentifier("apiProfiles")
             if hasSyncedChanges {
-                Text("iCloud 中的配置有更新，当前未保存的输入已保留。").font(.caption).foregroundStyle(Notebook.secondaryInk)
+                Text("iCloud 中的配置有更新，当前输入已保留。").font(.caption).foregroundStyle(Notebook.secondaryInk)
                 Button("载入已同步配置") { loadSavedConfiguration() }.font(.subheadline)
             }
             fieldLabel("接口名称")
             TextField("例如：日常使用、备用接口", text: $profileName).accessibilityIdentifier("apiProfileName").focused($inputFocused)
-            fieldLabel("API 格式")
-            Picker("API 格式", selection: $configuration.format) {
-                ForEach(APIFormat.allCases) { Text($0.title).tag($0) }
-            }.pickerStyle(.segmented).accessibilityIdentifier("apiFormat")
-            Text("每个接口独立保存地址、Key 和模型，支持自定义服务地址。").font(.caption).foregroundStyle(Notebook.secondaryInk)
+            Text("使用 OpenAI 兼容格式，支持自定义服务地址。填写后自动保存，每个接口独立保留地址、Key 和模型。")
+                .font(.caption).foregroundStyle(Notebook.secondaryInk)
             fieldLabel("接口地址")
             TextField("https://api.example.com/v1", text: $configuration.baseURL)
                 .keyboardType(.URL).textContentType(.URL).accessibilityIdentifier("apiURL").focused($inputFocused)
@@ -449,7 +569,7 @@ private struct ModelAPISettingsView: View {
             Divider()
             Button {
                 inputFocused = false
-                if fetchingModels { invalidateRequest() } else { fetchModels() }
+                if fetchingModels { invalidateRequest() } else if flushSave() { fetchModels() }
             } label: {
                 HStack {
                     if fetchingModels { ProgressView() } else { Image(systemName: "arrow.clockwise") }
@@ -468,18 +588,10 @@ private struct ModelAPISettingsView: View {
             TextField("选择模型，或直接输入模型 ID", text: $configuration.model)
                 .accessibilityIdentifier("modelName").focused($inputFocused)
             Text("列表由当前接口和 Key 决定；请选支持文字对话的模型。服务未提供列表时，也可直接填写 ID。").font(.caption).foregroundStyle(Notebook.secondaryInk)
-            Button("保存配置") {
-                inputFocused = false
-                do {
-                    try preferences.saveProfile(id: profileID, name: profileName, configuration: configuration, key: key)
-                    profileID = preferences.activeProfileID
-                    savedConfiguration = configuration; savedKey = key; savedName = profileName; hasSyncedChanges = false
-                    isError = false; message = "配置已保存。"
-                } catch { isError = true; message = error.localizedDescription }
-            }.buttonStyle(InkButtonStyle()).disabled(isBusy).accessibilityIdentifier("saveAPI")
+            if let saveError { NoteMessage(text: saveError, isError: true).accessibilityIdentifier("apiSaveError") }
             Button {
                 inputFocused = false
-                if testing { operation?.cancel() } else { testConnection() }
+                if testing { operation?.cancel() } else if flushSave() { testConnection() }
             } label: {
                 HStack { if testing { ProgressView() }; Text(testing ? "取消测试" : "测试连接") }
             }.buttonStyle(InkButtonStyle(prominent: false)).disabled(fetchingModels).accessibilityIdentifier("testAPI")
@@ -512,50 +624,82 @@ private struct ModelAPISettingsView: View {
                     .font(.subheadline).disabled(isBusy).accessibilityIdentifier("deleteAPIProfile")
             }
         }.textInputAutocapitalization(.never).autocorrectionDisabled()
-            .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { inputFocused = false } } }
+            .toolbar { ToolbarItemGroup(placement: .keyboard) { if inputFocused { Spacer(); Button("收起键盘") { inputFocused = false } } } }
             .onAppear {
                 guard !loaded else { return }
                 loadSavedConfiguration()
                 loaded = true
             }
             .onChange(of: preferences.syncRevision) { _, _ in
+                guard preferences.syncRevision != handledRevision else { return }
                 if !isDirty && !isBusy { loadSavedConfiguration() }
                 else { hasSyncedChanges = true }
             }
-            .onChange(of: configuration.baseURL) { _, _ in invalidateModels() }
-            .onChange(of: key) { _, _ in invalidateModels() }
-            .onChange(of: configuration.format) { _, _ in invalidateModels() }
-            .onChange(of: configuration.model) { _, _ in if testing { invalidateRequest() } }
+            .onChange(of: configuration.baseURL) { _, _ in if isDirty { invalidateModels(); scheduleSave() } }
+            .onChange(of: key) { _, _ in if isDirty { invalidateModels(); scheduleSave() } }
+            .onChange(of: configuration.model) { _, _ in
+                if isDirty { if testing { invalidateRequest() }; scheduleSave() }
+            }
+            .onChange(of: profileName) { _, _ in scheduleSave() }
+            .onChange(of: inputFocused) { _, focused in if !focused { flushSave() } }
+            .onChange(of: scenePhase) { _, phase in if phase != .active { flushSave() } }
+            .onDisappear { flushSave() }
 
             .sheet(isPresented: $showModels) {
                 ModelSelectionView(models: models, selection: $configuration.model).presentationDetents([.large])
             }
-            .confirmationDialog("当前输入尚未保存，继续将放弃这些修改？", isPresented: $confirmSwitch, titleVisibility: .visible) {
-                Button("放弃修改并继续", role: .destructive) {
-                    if let action = pendingProfileAction { performProfileAction(action) }
-                }
-                Button("继续编辑", role: .cancel) {}
-            }
             .confirmationDialog("删除此接口配置？", isPresented: $confirmDelete, titleVisibility: .visible) {
                 Button("删除接口", role: .destructive) {
-                    if let profileID { preferences.deleteProfile(profileID); loadSavedConfiguration() }
+                    if let profileID { pendingSave?.cancel(); preferences.deleteProfile(profileID); loadSavedConfiguration() }
                 }
                 Button("取消", role: .cancel) {}
             }
     }
     private func fieldLabel(_ text: String) -> some View { Text(text).font(.caption.weight(.medium)).foregroundStyle(Notebook.secondaryInk) }
     private func loadSavedConfiguration() {
+        pendingSave?.cancel(); saveError = nil
+        invalidateModels()
+        handledRevision = preferences.syncRevision
         profileID = preferences.activeProfile?.id
         profileName = preferences.activeProfile?.name ?? ""; savedName = profileName
         configuration = preferences.configuration; savedConfiguration = configuration
         key = ""; savedKey = ""
-        do { key = try preferences.activeProfile.map { try preferences.profileKey($0) } ?? ""; savedKey = key; hasSyncedChanges = false }
+        do {
+            key = try preferences.activeProfile.map { try preferences.profileKey($0) } ?? ""
+            savedKey = key; hasSyncedChanges = false
+        }
         catch { message = error.localizedDescription; isError = true }
+    }
+    private func scheduleSave() {
+        guard loaded, isDirty else { return }
+        pendingSave?.cancel()
+        pendingSave = Task { @MainActor in
+            do { try await Task.sleep(for: .milliseconds(600)) } catch { return }
+            guard !Task.isCancelled else { return }
+            flushSave()
+        }
+    }
+    @discardableResult private func flushSave() -> Bool {
+        pendingSave?.cancel(); pendingSave = nil
+        guard loaded, isDirty else { return true }
+        do {
+            // Only write the key after an actual edit. Missing/locked synced keys stay associated.
+            let editedKey: String? = key != savedKey ? key : nil
+            try preferences.saveProfile(id: profileID, name: profileName, configuration: configuration, key: editedKey)
+            profileID = preferences.activeProfileID
+            savedConfiguration = configuration; savedKey = key; savedName = profileName
+            handledRevision = preferences.syncRevision
+            saveError = nil; hasSyncedChanges = false
+            return true
+        } catch {
+            saveError = "自动保存未完成：" + error.localizedDescription
+            return false
+        }
     }
     private func requestProfileAction(_ action: ProfileAction) {
         inputFocused = false
-        if isDirty { pendingProfileAction = action; confirmSwitch = true }
-        else { performProfileAction(action) }
+        guard flushSave() else { return }
+        performProfileAction(action)
     }
     private func performProfileAction(_ action: ProfileAction) {
         invalidateModels()
@@ -567,7 +711,6 @@ private struct ModelAPISettingsView: View {
             }
             loadSavedConfiguration()
         } catch { message = error.localizedDescription; isError = true }
-        pendingProfileAction = nil
     }
     private func invalidateRequest() {
         requestID = UUID(); operation?.cancel(); testing = false; fetchingModels = false
@@ -596,7 +739,7 @@ private struct ModelAPISettingsView: View {
             switch result {
             case .success(.models(let values)):
                 models = values; isError = false
-                message = values.isEmpty ? "接口未返回可用模型，可以直接填写自定义 ID。" : "已获取 \(values.count) 个模型，选择后记得保存配置。"
+                message = values.isEmpty ? "接口未返回可用模型，可以直接填写自定义 ID。" : "已获取 \(values.count) 个模型，选择后自动保存。"
                 showModels = !values.isEmpty
             case .failure(let error): if !(error is CancellationError) { message = error.localizedDescription; isError = true }
             default: break

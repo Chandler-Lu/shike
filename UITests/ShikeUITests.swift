@@ -760,7 +760,7 @@ final class ShikeUITests: XCTestCase {
     func testMultipleProfilesAndStableConnectionButton() {
         let app = launchExample()
         XCTAssertFalse(app.buttons["homeAPIProfile"].exists)
-        app.tabBars.buttons["设置"].tap()
+        app.tabBars.buttons["设置"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let api = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "模型与 API")).firstMatch
         func reveal(_ element: XCUIElement) {
             for _ in 0..<24 {
@@ -777,27 +777,26 @@ final class ShikeUITests: XCTestCase {
             XCTAssertTrue(element.isHittable, app.debugDescription)
         }
         reveal(api); api.tap()
-        func saveProfile(name: String, format: String, model: String) {
+        func saveProfile(name: String, model: String) {
             let field = app.textFields["apiProfileName"]; reveal(field); field.tap()
             if let existing = field.value as? String, existing != field.placeholderValue {
                 field.typeText(String(repeating: XCUIKeyboardKey.delete.rawValue, count: existing.count))
             }
             field.typeText(name)
-            let formatButton = app.segmentedControls["apiFormat"].buttons[format]; reveal(formatButton); formatButton.tap()
             let url = app.textFields["apiURL"]; reveal(url); url.tap(); url.typeText("https://example.com/custom")
             let modelField = app.textFields["modelName"]; reveal(modelField); modelField.tap(); modelField.typeText(model)
             if app.buttons["收起键盘"].exists { app.buttons["收起键盘"].tap() }
-            let save = app.buttons["saveAPI"]; reveal(save); save.tap()
-            XCTAssertTrue(app.staticTexts["配置已保存。"].waitForExistence(timeout: 5))
+            XCTAssertFalse(app.buttons["saveAPI"].exists)
+            XCTAssertFalse(app.segmentedControls["apiFormat"].exists)
         }
-        saveProfile(name: "Claude Work", format: "Claude", model: "claude-fixture")
-        app.tabBars.buttons["导入"].tap()
+        saveProfile(name: "Claude Work", model: "claude-fixture")
+        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let homeProfile = app.buttons["homeAPIProfile"]
         XCTAssertTrue(homeProfile.waitForExistence(timeout: 5))
         XCTAssertEqual(homeProfile.value as? String, "Claude Work")
         reveal(homeProfile)
         capture("home-api-single", app: app)
-        app.tabBars.buttons["设置"].tap()
+        app.tabBars.buttons["设置"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let test = app.buttons["testAPI"]; reveal(test)
         let before = test.frame
         test.tap()
@@ -806,46 +805,45 @@ final class ShikeUITests: XCTestCase {
         let picker = app.buttons["apiProfiles"]
         reveal(picker)
         picker.tap(); app.buttons["newAPIProfile"].tap()
-        saveProfile(name: "Gemini Backup", format: "Gemini", model: "gemini-fixture")
+        saveProfile(name: "Gemini Backup", model: "gemini-fixture")
         reveal(picker)
         picker.tap(); app.buttons["Claude Work"].tap()
         XCTAssertEqual(app.textFields["apiProfileName"].value as? String, "Claude Work")
-        XCTAssertTrue(app.segmentedControls["apiFormat"].buttons["Claude"].isSelected)
+        XCTAssertFalse(app.segmentedControls["apiFormat"].exists)
         capture("api-profiles", app: app)
         picker.tap(); app.buttons["duplicateAPIProfile"].tap()
         XCTAssertEqual(app.textFields["apiProfileName"].value as? String, "Claude Work 副本")
         XCTAssertEqual(app.textFields["apiURL"].value as? String, "https://example.com/custom")
         XCTAssertEqual(app.textFields["modelName"].value as? String, "claude-fixture")
-        XCTAssertTrue(app.segmentedControls["apiFormat"].buttons["Claude"].isSelected)
+        XCTAssertFalse(app.segmentedControls["apiFormat"].exists)
         capture("api-duplicate", app: app)
         picker.tap(); app.buttons["newAPIProfile"].tap()
         XCTAssertEqual(app.textFields["apiProfileName"].value as? String, "新接口")
         XCTAssertEqual(app.textFields["apiURL"].value as? String, app.textFields["apiURL"].placeholderValue)
         XCTAssertEqual(app.textFields["modelName"].value as? String, app.textFields["modelName"].placeholderValue)
-        XCTAssertTrue(app.segmentedControls["apiFormat"].buttons["OpenAI"].isSelected)
+        XCTAssertFalse(app.segmentedControls["apiFormat"].exists)
         picker.tap()
         XCTAssertTrue(app.buttons["Claude Work 副本"].exists)
         app.buttons["Claude Work"].tap()
         XCTAssertEqual(app.textFields["modelName"].value as? String, "claude-fixture")
-        app.tabBars.buttons["导入"].tap()
+        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(homeProfile.waitForExistence(timeout: 5))
         XCTAssertEqual(homeProfile.value as? String, "Claude Work")
         reveal(homeProfile)
         homeProfile.tap(); app.buttons["Gemini Backup"].tap()
         XCTAssertEqual(homeProfile.value as? String, "Gemini Backup")
         capture("home-api", app: app)
-        app.tabBars.buttons["设置"].tap()
+        app.tabBars.buttons["设置"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertEqual(app.textFields["apiProfileName"].value as? String, "Gemini Backup")
-        app.tabBars.buttons["导入"].tap()
+        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertEqual(homeProfile.value as? String, "Gemini Backup")
 
-        app.tabBars.buttons["设置"].tap()
+        app.tabBars.buttons["设置"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let name = app.textFields["apiProfileName"]; reveal(name)
         name.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         name.typeText(" — Long personal calendar connection")
         if app.buttons["收起键盘"].exists { app.buttons["收起键盘"].tap() }
-        let save = app.buttons["saveAPI"]; reveal(save); save.tap()
-        app.tabBars.buttons["导入"].tap()
+        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let fullName = "Gemini Backup — Long personal calendar connection"
         XCTAssertEqual(homeProfile.value as? String, fullName)
         reveal(homeProfile)

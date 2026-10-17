@@ -44,12 +44,11 @@ public struct LLMClient: Sendable {
             try Task.checkCancellation()
             var url = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
             if let cursor {
-                let parameter = configuration.format == .gemini ? "pageToken" : (configuration.format == .claude ? "after_id" : "after")
-                url.queryItems = [URLQueryItem(name: parameter, value: cursor)]
+                url.queryItems = [URLQueryItem(name: "after", value: cursor)]
             }
             var request = URLRequest(url: url.url!)
             request.httpMethod = "GET"
-            authorize(&request, format: configuration.format, key: key)
+            authorize(&request, key: key)
             request.setValue("application/json", forHTTPHeaderField: "Accept")
             let data: Data; let response: URLResponse
             do { (data, response) = try await session.data(for: request) }
@@ -71,20 +70,11 @@ public struct LLMClient: Sendable {
             guard data.count <= 5_000_000 else { throw ShikeError.message("模型列表过长，请使用自定义模型 ID。") }
             receivedBytes += data.count
             observer?(.progress(LLMProgress(stage: .receiving, elapsed: ProcessInfo.processInfo.systemUptime - started, attempt: 1, receivedBytes: receivedBytes)))
-            let pageModels: [APIModel]; let next: String?
-            if configuration.format == .gemini {
-                guard let page = try? JSONDecoder().decode(GeminiModelList.self, from: data) else {
-                    throw ShikeError.message("模型列表格式不兼容，请使用自定义模型 ID。")
-                }
-                pageModels = (page.models ?? []).map { APIModel(id: $0.name.hasPrefix("models/") ? String($0.name.dropFirst(7)) : $0.name, ownedBy: $0.displayName) }
-                next = page.nextPageToken.flatMap { $0.isEmpty ? nil : $0 }
-            } else {
-                guard let page = try? JSONDecoder().decode(ModelListResponse.self, from: data) else {
-                    throw ShikeError.message("模型列表格式不兼容，请使用自定义模型 ID。")
-                }
-                pageModels = page.data
-                next = page.has_more == true ? (page.last_id ?? page.data.last?.id ?? "") : nil
+            guard let page = try? JSONDecoder().decode(ModelListResponse.self, from: data) else {
+                throw ShikeError.message("模型列表格式不兼容，请使用自定义模型 ID。")
             }
+            let pageModels = page.data
+            let next = page.has_more == true ? (page.last_id ?? page.data.last?.id ?? "") : nil
             for model in pageModels where !model.id.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { models[model.id] = model }
             guard let next else { return models.values.sorted { $0.id.localizedStandardCompare($1.id) == .orderedAscending } }
             guard !next.isEmpty, cursors.insert(next).inserted else {
@@ -134,7 +124,8 @@ public struct LLMClient: Sendable {
 
     public func plan(conversation: PlanningConversation, drafts: [EventDraft], timeZone: TimeZone,
                      referenceDate: Date, available: [DateInterval]?, configuration: APIConfiguration,
-                     apiKey: String, calendars: [CalendarCandidate] = [], forcedCategory: EventCategory? = nil, prompts: PromptSettings = .init(), observer: LLMObserver? = nil) async throws -> PlanningReply {
+                     apiKey: String, calendars: [CalendarCandidate] = [], forcedCategory: EventCategory? = nil, prompts: PromptSettings = .init(), observer: LLMObserver? = nil,
+                     research: PlanningResearchRuntime? = nil) async throws -> PlanningReply {
         try await observed(configuration: configuration, observer: observer) { trace in
             try conversation.validate(timeZone: timeZone)
             // Give the model one consistent wall clock, including the offset on every timestamp.
@@ -174,10 +165,22 @@ public struct LLMClient: Sendable {
             """
             if let forcedCategory { instructions += "\n用户强制指定全部事件类别为 \(forcedCategory.rawValue)。" }
             instructions += "\n" + ModelOutputContract.eventFields(timeZone: timeZone)
-            let input = String(data: try JSONSerialization.data(withJSONObject: context, options: [.sortedKeys]), encoding: .utf8)!
-            let content = try await generate(instructions: instructions, input: input, configuration: configuration, apiKey: apiKey, outputTokens: 8192, trace: trace)
-            var reply = try PlanningReply.decode(content, timeZone: timeZone)
-            if reply.kind == .question && conversation.hasAnsweredQuestion(reply.message) {
+            var reply: PlanningReply
+            if let research {
+                reply = try await PlanningAgent.run(conversation: conversation, timeZone: timeZone, runtime: research,
+                    progress: { trace.progress($0) }, remaining: { policy.total - trace.elapsed }) { state, extraInstructions in
+                    var inputContext = context
+                    inputContext["research"] = try JSONSerialization.jsonObject(with: Data(state.utf8))
+                    let input = String(decoding: try JSONSerialization.data(withJSONObject: inputContext, options: [.sortedKeys]), as: UTF8.self)
+                    return try await generate(instructions: instructions + "\n" + extraInstructions, input: input,
+                        configuration: configuration, apiKey: apiKey, outputTokens: 8192, trace: trace)
+                }
+            } else {
+                let input = String(data: try JSONSerialization.data(withJSONObject: context, options: [.sortedKeys]), encoding: .utf8)!
+                let content = try await generate(instructions: instructions, input: input, configuration: configuration, apiKey: apiKey, outputTokens: 8192, trace: trace)
+                reply = try PlanningReply.decode(content, timeZone: timeZone)
+            }
+            if research == nil && reply.kind == .question && conversation.hasAnsweredQuestion(reply.message) {
                 // At most one correction; never append the repeated question to the conversation.
                 context["rejectedQuestion"] = reply.message
                 let correctionInput = String(decoding: try JSONSerialization.data(withJSONObject: context, options: [.sortedKeys]), as: UTF8.self)
@@ -264,36 +267,18 @@ public struct LLMClient: Sendable {
         let endpoint = try configuration.endpoint()
         let cacheKey = configuration.format.rawValue + "|" + endpoint.absoluteString + "|" + configuration.model
         var streaming = policy.streaming && !capabilities.unsupported("stream", key: cacheKey)
-        var jsonMode = configuration.format != .claude && (policy.bufferedComparison || !capabilities.unsupported("json", key: cacheKey))
+        var jsonMode = policy.bufferedComparison || !capabilities.unsupported("json", key: cacheKey)
         for attempt in 1...3 {
             try Task.checkCancellation()
             guard trace.elapsed < policy.total else { throw LLMTimeout.total }
-            var payload: [String: Any]
-            var target = endpoint
-            switch configuration.format {
-            case .openAI:
-                payload = ["model": configuration.model.trimmingCharacters(in: .whitespacesAndNewlines), "stream": streaming,
-                           "messages": [["role": "system", "content": instructions], ["role": "user", "content": cleanText]]]
-                if jsonMode { payload["response_format"] = ["type": "json_object"] }
-            case .claude:
-                payload = ["model": configuration.model.trimmingCharacters(in: .whitespacesAndNewlines), "max_tokens": outputTokens,
-                           "stream": streaming, "system": instructions, "messages": [["role": "user", "content": cleanText]]]
-            case .gemini:
-                payload = ["systemInstruction": ["parts": [["text": instructions]]],
-                           "contents": [["role": "user", "parts": [["text": cleanText]]]]]
-                if jsonMode { payload["generationConfig"] = ["responseMimeType": "application/json"] }
-                if streaming {
-                    var parts = URLComponents(url: endpoint, resolvingAgainstBaseURL: false)!
-                    parts.path = String(parts.path.dropLast("generateContent".count)) + "streamGenerateContent"
-                    parts.queryItems = [URLQueryItem(name: "alt", value: "sse")]
-                    target = parts.url!
-                }
-            }
-            var request = URLRequest(url: target)
+            var payload: [String: Any] = ["model": configuration.model.trimmingCharacters(in: .whitespacesAndNewlines), "stream": streaming,
+                                         "messages": [["role": "system", "content": instructions], ["role": "user", "content": cleanText]]]
+            if jsonMode { payload["response_format"] = ["type": "json_object"] }
+            var request = URLRequest(url: endpoint)
             request.httpMethod = "POST"
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.setValue(streaming ? "text/event-stream, application/json" : "application/json", forHTTPHeaderField: "Accept")
-            authorize(&request, format: configuration.format, key: apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
+            authorize(&request, key: apiKey.trimmingCharacters(in: .whitespacesAndNewlines))
             request.httpBody = try JSONSerialization.data(withJSONObject: payload)
             if attempt == 1 { trace.report.preparation = trace.elapsed }
             trace.progress(.connecting, attempt: attempt)
@@ -335,16 +320,16 @@ public struct LLMClient: Sendable {
                 if policy.compatibilityFallback && attempt < 3 && [400, 422].contains(response.statusCode) && rejected {
                     if jsonMode && rejectsJSON {
                         jsonMode = false; capabilities.mark("json", key: cacheKey)
-                        trace.report.attempts[attempt - 1].fallback = "接口明确不支持 JSON 模式，移除此参数"
+                        trace.report.attempts[trace.report.attempts.count - 1].fallback = "接口明确不支持 JSON 模式，移除此参数"
                         continue
                     }
                     if streaming && detail.contains("stream") {
                         streaming = false; capabilities.mark("stream", key: cacheKey)
-                        trace.report.attempts[attempt - 1].fallback = "接口明确不支持流式，改用非流式"
+                        trace.report.attempts[trace.report.attempts.count - 1].fallback = "接口明确不支持流式，改用非流式"
                         continue
                     }
                 }
-                trace.report.attempts[attempt - 1].failure = "服务器 HTTP \(response.statusCode)"
+                trace.report.attempts[trace.report.attempts.count - 1].failure = "服务器 HTTP \(response.statusCode)"
                 switch response.statusCode {
                 case 401, 403: throw ShikeError.message("接口认证失败，请检查 API Key 和模型使用权限。")
                 case 404: throw ShikeError.message("未找到接口或模型，请检查接口地址和模型名称。")
@@ -356,43 +341,21 @@ public struct LLMClient: Sendable {
             }
             trace.progress(.parsing, attempt: attempt); trace.decodeStart = trace.elapsed
             if let content = result.content { return content }
-            return try decodeEnvelope(result.data, format: configuration.format)
+            return try decodeEnvelope(result.data)
         }
         throw ShikeError.message("模型未返回可用结果。")
     }
 
-    private func decodeEnvelope(_ data: Data, format: APIFormat) throws -> String {
-        let content: String
-        switch format {
-        case .openAI:
-            guard let envelope = try? JSONDecoder().decode(ChatResponse.self, from: data), let choice = envelope.choices.first else {
-                throw ShikeError.message("接口返回格式不兼容 OpenAI Chat Completions。")
-            }
-            if choice.finish_reason == "length" { throw ShikeError.message("模型输出被截断，请减少单次导入内容。") }
-            guard choice.message.refusal == nil, let text = choice.message.content else { throw ShikeError.message("模型未能解析这段内容，请修改原文后重试。") }
-            content = text
-        case .claude:
-            guard let envelope = try? JSONDecoder().decode(ClaudeResponse.self, from: data) else { throw ShikeError.message("接口返回格式不兼容 Claude Messages。") }
-            if envelope.stop_reason == "max_tokens" { throw ShikeError.message("模型输出被截断，请减少单次导入内容。") }
-            guard envelope.stop_reason == "end_turn" || envelope.stop_reason == "stop_sequence" else { throw ShikeError.message("模型未完成解析，请修改原文后重试。") }
-            content = envelope.content.filter { $0.type == "text" }.compactMap(\.text).joined(separator: "\n")
-        case .gemini:
-            guard let envelope = try? JSONDecoder().decode(GeminiResponse.self, from: data) else { throw ShikeError.message("接口返回格式不兼容 Gemini GenerateContent。") }
-            guard let candidate = envelope.candidates?.first else { throw ShikeError.message("模型未能解析这段内容，请修改原文后重试。") }
-            if candidate.finishReason == "MAX_TOKENS" { throw ShikeError.message("模型输出被截断，请减少单次导入内容。") }
-            guard candidate.finishReason == "STOP" else { throw ShikeError.message("模型未完成解析，请修改原文后重试。") }
-            content = candidate.content?.parts.filter { $0.thought != true }.compactMap(\.text).joined(separator: "\n") ?? ""
+    private func decodeEnvelope(_ data: Data) throws -> String {
+        guard let envelope = try? JSONDecoder().decode(ChatResponse.self, from: data), let choice = envelope.choices.first else {
+            throw ShikeError.message("接口返回格式不兼容 OpenAI Chat Completions。")
         }
-        return content
+        if choice.finish_reason == "length" { throw ShikeError.message("模型输出被截断，请减少单次导入内容。") }
+        guard choice.message.refusal == nil, let text = choice.message.content else { throw ShikeError.message("模型未能解析这段内容，请修改原文后重试。") }
+        return text
     }
-    private func authorize(_ request: inout URLRequest, format: APIFormat, key: String) {
-        switch format {
-        case .openAI: request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
-        case .claude:
-            request.setValue(key, forHTTPHeaderField: "x-api-key")
-            request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
-        case .gemini: request.setValue(key, forHTTPHeaderField: "x-goog-api-key")
-        }
+    private func authorize(_ request: inout URLRequest, key: String) {
+        request.setValue("Bearer \(key)", forHTTPHeaderField: "Authorization")
     }
 
 }
@@ -421,26 +384,4 @@ private final class SameOriginRedirectDelegate: NSObject, URLSessionTaskDelegate
         let sameOrigin = original?.scheme == target?.scheme && original?.host == target?.host && original?.port == target?.port
         completionHandler(sameOrigin ? request : nil)
     }
-}
-
-private struct GeminiModelList: Decodable {
-    struct Model: Decodable { let name: String; let displayName: String? }
-    let models: [Model]?
-    let nextPageToken: String?
-}
-private struct ClaudeResponse: Decodable {
-    struct Block: Decodable { let type: String; let text: String? }
-    let content: [Block]
-    let stop_reason: String?
-}
-private struct GeminiResponse: Decodable {
-    struct Candidate: Decodable {
-        struct Content: Decodable {
-            struct Part: Decodable { let text: String?; let thought: Bool? }
-            let parts: [Part]
-        }
-        let content: Content?
-        let finishReason: String?
-    }
-    let candidates: [Candidate]?
 }

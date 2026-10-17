@@ -6,6 +6,93 @@ import ShikeCore
 @testable import Shike
 
 final class NativeServiceTests: XCTestCase {
+    @MainActor func testSearchConfigurationAutosaveAndToggleRetainIndependentCredentials() throws {
+        let defaults = try consentDefaults(), preferences = Preferences(defaults: defaults)
+        XCTAssertFalse(preferences.searchReady)
+        preferences.setSearchEnabled(true)
+        XCTAssertFalse(preferences.searchReady)
+        try preferences.saveSearchConfiguration(service: .bocha, key: "fixture-search-key")
+        let config = preferences.searchSettings.selected
+        defer { if let id = config.credentialID { try? KeychainStore.saveSearchKey("", id: id, synchronizable: false) } }
+        XCTAssertTrue(preferences.searchReady)
+        XCTAssertEqual(try preferences.searchKey(for: config), "fixture-search-key")
+        XCTAssertEqual(Preferences(defaults: defaults).searchSettings, preferences.searchSettings)
+        preferences.beginSearchEditing(); XCTAssertFalse(preferences.searchReady)
+        XCTAssertThrowsError(try preferences.saveSearchConfiguration(service: .bocha, key: String(repeating: "x", count: 16_385)))
+        XCTAssertFalse(preferences.searchReady)
+        try preferences.saveSearchConfiguration(service: .bocha, key: "fixture-search-key")
+        XCTAssertTrue(preferences.searchReady)
+        XCTAssertEqual(preferences.searchSettings.selected.credentialID, config.credentialID)
+        preferences.setSearchEnabled(false)
+        XCTAssertFalse(preferences.searchReady); XCTAssertEqual(preferences.searchSettings.selected, config)
+        preferences.setSearchEnabled(true); XCTAssertTrue(preferences.searchReady)
+        preferences.selectSearchService(.tavily); XCTAssertFalse(preferences.searchReady)
+        preferences.selectSearchService(.bocha); XCTAssertTrue(preferences.searchReady)
+        preferences.revokeSearchAuthorization(); XCTAssertFalse(preferences.searchReady)
+        preferences.setSearchEnabled(true); XCTAssertTrue(preferences.searchReady)
+        let data = try JSONEncoder().encode(preferences.exportPreferences)
+        let exported = String(decoding: data, as: UTF8.self)
+        XCTAssertFalse(exported.contains("fixture-search-key")); XCTAssertFalse(exported.contains(config.credentialID!))
+    }
+
+    @MainActor func testLegacySearchAddressRestoresOfficialServiceWithoutTransferringConsent() throws {
+        let defaults = try consentDefaults()
+        let old = #"{"enabled":true,"selectedService":"bocha","configurations":[{"service":"bocha","baseURL":"https://custom.example/proxy","credentialID":"existing-search-key"}]}"#
+        defaults.set(Data(old.utf8), forKey: "searchSettings")
+        defaults.set(["bocha|https://custom.example/proxy/v1/web-search"], forKey: "searchServiceGrants")
+        let preferences = Preferences(defaults: defaults)
+        XCTAssertEqual(preferences.searchSettings.selected.credentialID, "existing-search-key")
+        XCTAssertEqual(try preferences.searchSettings.selected.endpoint().absoluteString, "https://api.bochaai.com/v1/web-search")
+        XCTAssertFalse(preferences.searchAuthorized)
+        XCTAssertFalse(preferences.searchReady)
+        let persisted = String(decoding: try XCTUnwrap(defaults.data(forKey: "searchSettings")), as: UTF8.self)
+        XCTAssertFalse(persisted.contains("custom.example"))
+        XCTAssertTrue(persisted.contains("api.bochaai.com"))
+    }
+
+    @MainActor func testSearchCloudSyncMovesKeysButNeverTransfersLocalAuthorization() throws {
+        let cloud = MemoryCloudStore(), a = Preferences(defaults: try consentDefaults(), cloud: cloud)
+        a.setSearchEnabled(true)
+        try a.saveSearchConfiguration(service: .bocha, key: "fixture-search-sync-key")
+        let localID = a.searchSettings.selected.credentialID!
+        defer { try? KeychainStore.saveSearchKey("", id: localID, synchronizable: false) }
+        try a.setCloudEnabled(true)
+        let cloudID = a.searchSettings.selected.credentialID!
+        defer {
+            try? KeychainStore.saveSearchKey("", id: cloudID, synchronizable: true)
+            try? KeychainStore.saveSearchKey("", id: cloudID, synchronizable: false)
+        }
+        XCTAssertNotEqual(localID, cloudID)
+        XCTAssertEqual(try a.searchKey(for: a.searchSettings.selected), "fixture-search-sync-key")
+        let cloudText = String(decoding: try XCTUnwrap(cloud.payload), as: UTF8.self)
+        XCTAssertFalse(cloudText.contains("fixture-search-sync-key")); XCTAssertFalse(cloudText.contains("searchServiceGrants"))
+        let b = Preferences(defaults: try consentDefaults(), cloud: cloud)
+        try b.setCloudEnabled(true)
+        XCTAssertEqual(b.searchSettings, a.searchSettings)
+        XCTAssertFalse(b.searchReady); XCTAssertFalse(b.searchAuthorized)
+        b.setSearchEnabled(true); XCTAssertTrue(b.searchReady)
+        try b.setCloudEnabled(false)
+        XCTAssertEqual(try b.searchKey(for: b.searchSettings.selected), "fixture-search-sync-key")
+        XCTAssertTrue(b.searchReady)
+    }
+
+    @MainActor func testSearchSettingsImportKeepsExistingConfigurationAndStripsCredentialIDs() throws {
+        let preferences = Preferences(defaults: try consentDefaults())
+        var settings = SearchSettings(); settings.enabled = true
+        settings.set(.init(service: .tavily, credentialID: "must-not-import"))
+        settings.selectedService = .tavily
+        let backup = AppDataExport(version: "1", build: "1", preferences: .init(iCloudEnabled: false, categoryRoutingEnabled: false,
+            defaultCalendar: nil, categoryCalendars: [:], activeProfileID: "", calendar: CalendarPreferences(), search: settings),
+            profiles: [], prompts: PromptSettings(), countdowns: [], categories: [], sessions: [], calendarReferences: [:])
+        preferences.importSettings(try AppDataImport(data: backup.data()))
+        XCTAssertEqual(preferences.searchSettings.selectedService, .tavily)
+        XCTAssertNil(preferences.searchSettings.selected.credentialID)
+        XCTAssertFalse(preferences.searchAuthorized); XCTAssertFalse(preferences.searchReady)
+        preferences.selectSearchService(.bocha)
+        preferences.importSettings(try AppDataImport(data: backup.data()))
+        XCTAssertEqual(preferences.searchSettings.selectedService, .bocha)
+    }
+
     @MainActor func testPromptSettingsPersistSyncAndResetIndependently() throws {
         let defaults = try consentDefaults(), cloud = MemoryCloudStore()
         let a = Preferences(defaults: defaults, cloud: cloud)
@@ -419,7 +506,7 @@ final class NativeServiceTests: XCTestCase {
             try ExtractionConsent(configuration: APIConfiguration(baseURL: url, model: "new-model", format: format), includesCalendarNames: false)
         }
         XCTAssertEqual(try scope("https://EXAMPLE.com:443"), try scope("https://example.com/v1/chat/completions/"))
-        XCTAssertEqual(try scope("https://example.com/v1beta", .gemini), try scope("https://example.com/v1beta/models/old:generateContent", .gemini))
+        XCTAssertEqual(try scope("https://example.com/v1beta", .openAI), try scope("https://example.com/v1beta/chat/completions", .openAI))
         XCTAssertNotEqual(try scope("https://example.com/tenant-a/v1"), try scope("https://example.com/tenant-b/v1"))
         XCTAssertNotEqual(try scope("https://a.example.com"), try scope("https://b.example.com"))
         XCTAssertThrowsError(try scope("https://user:password@example.com"))
@@ -652,7 +739,7 @@ final class NativeServiceTests: XCTestCase {
         XCTAssertEqual(blank.configuration, APIConfiguration())
         XCTAssertNil(blank.credentialID)
         XCTAssertEqual(try preferences.profileKey(blank), "")
-        try preferences.saveProfile(id: nil, name: "Claude", configuration: APIConfiguration(baseURL: "https://example.com/custom", model: "fixture", format: .claude), key: "original-fixture-key")
+        try preferences.saveProfile(id: nil, name: "Claude", configuration: APIConfiguration(baseURL: "https://example.com/custom", model: "fixture", format: .openAI), key: "original-fixture-key")
         let original = try XCTUnwrap(preferences.activeProfile)
         credentials.insert(try XCTUnwrap(original.credentialID))
         try preferences.duplicateProfile(original.id)
@@ -663,7 +750,7 @@ final class NativeServiceTests: XCTestCase {
         XCTAssertEqual(copy.configuration, original.configuration)
         XCTAssertEqual(copy.name, "Claude 副本")
         XCTAssertEqual(try preferences.profileKey(copy), "original-fixture-key")
-        try preferences.saveProfile(id: copy.id, name: copy.name, configuration: APIConfiguration(baseURL: "https://backup.example/custom", model: "backup", format: .gemini), key: "changed-fixture-key")
+        try preferences.saveProfile(id: copy.id, name: copy.name, configuration: APIConfiguration(baseURL: "https://backup.example/custom", model: "backup", format: .openAI), key: "changed-fixture-key")
         credentials.insert(try XCTUnwrap(preferences.activeProfile?.credentialID))
         XCTAssertEqual(try preferences.profileKey(original), "original-fixture-key")
         XCTAssertEqual(preferences.profiles.first { $0.id == original.id }?.configuration, original.configuration)
@@ -686,7 +773,62 @@ final class NativeServiceTests: XCTestCase {
         XCTAssertEqual(restored.activeProfile?.name, "Claude 副本 3")
     }
 
-    @MainActor func testMultipleProfilesKeepFormatsAndCredentialsIsolated() throws {
+    @MainActor func testProfileAutosaveKeepsPartialFieldsAndReusesUnchangedCredential() throws {
+        let suite = "Shike.ProfileAutosave.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        let preferences = Preferences(defaults: defaults)
+        var credentials = Set<String>()
+        defer {
+            for id in credentials { try? KeychainStore.saveProfileKey("", id: id, synchronizable: false) }
+            defaults.removePersistentDomain(forName: suite)
+        }
+        // A URL or model can be filled first; neither requires pressing a save button.
+        var config = APIConfiguration(baseURL: "https://example.com/v1")
+        try preferences.saveProfile(id: nil, name: "", configuration: config, key: nil)
+        let id = try XCTUnwrap(preferences.activeProfile?.id)
+        XCTAssertEqual(Preferences(defaults: defaults).configuration, config)
+        XCTAssertFalse(try XCTUnwrap(preferences.activeProfile).name.isEmpty)
+        try preferences.saveProfile(id: id, name: "日常", configuration: config, key: "fixture-key")
+        let credential = try XCTUnwrap(preferences.activeProfile?.credentialID); credentials.insert(credential)
+        config.model = "custom-model"
+        try preferences.saveProfile(id: id, name: "日常", configuration: config, key: nil)
+        try preferences.saveProfile(id: id, name: "重命名", configuration: config, key: "fixture-key")
+        XCTAssertEqual(preferences.activeProfile?.credentialID, credential)
+        XCTAssertEqual(preferences.profiles.count, 1)
+        XCTAssertEqual(try preferences.profileKey(XCTUnwrap(preferences.activeProfile)), "fixture-key")
+        XCTAssertEqual(Preferences(defaults: defaults).configuration.model, "custom-model")
+        let beforeInvalid = preferences.profiles
+        XCTAssertThrowsError(try preferences.saveProfile(id: id, name: "日常", configuration: APIConfiguration(baseURL: "https://example.com?key=secret"), key: nil))
+        XCTAssertEqual(preferences.profiles, beforeInvalid)
+        try preferences.saveProfile(id: id, name: "日常", configuration: config, key: "updated-key")
+        credentials.insert(try XCTUnwrap(preferences.activeProfile?.credentialID))
+        XCTAssertNotEqual(preferences.activeProfile?.credentialID, credential)
+        XCTAssertEqual(try preferences.profileKey(XCTUnwrap(preferences.activeProfile)), "updated-key")
+        try preferences.saveProfile(id: id, name: "日常", configuration: config, key: "")
+        XCTAssertNil(preferences.activeProfile?.credentialID)
+        XCTAssertEqual(try preferences.profileKey(XCTUnwrap(preferences.activeProfile)), "")
+        preferences.deleteProfile(id)
+        XCTAssertThrowsError(try preferences.saveProfile(id: id, name: "deleted", configuration: config, key: nil))
+        XCTAssertTrue(preferences.profiles.isEmpty)
+    }
+
+    @MainActor func testProfileMetadataAutosavePreservesPendingCloudKey() throws {
+        let suite = "Shike.ProfilePendingKey.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let config = APIConfiguration(baseURL: "https://example.com", model: "old")
+        let profile = APIProfile(name: "同步接口", configuration: config, credentialID: "not-yet-synced-\(UUID())")
+        defaults.set(true, forKey: "iCloudSettingsEnabled")
+        defaults.set(try JSONEncoder().encode([profile]), forKey: "apiProfiles")
+        defaults.set(profile.id, forKey: "activeProfileID")
+        let preferences = Preferences(defaults: defaults)
+        try preferences.saveProfile(id: profile.id, name: "改名", configuration: config, key: nil)
+        XCTAssertEqual(preferences.activeProfile?.credentialID, profile.credentialID)
+        XCTAssertThrowsError(try preferences.saveProfile(id: profile.id, name: "改名", configuration: config, key: ""))
+        XCTAssertEqual(preferences.activeProfile?.credentialID, profile.credentialID)
+    }
+
+    @MainActor func testMultipleProfilesKeepOpenAIEndpointsAndCredentialsIsolated() throws {
         let suite = "Shike.ProfileTests.\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
         let preferences = Preferences(defaults: defaults)
@@ -694,16 +836,16 @@ final class NativeServiceTests: XCTestCase {
             for profile in preferences.profiles { if let id = profile.credentialID { try? KeychainStore.saveProfileKey("", id: id, synchronizable: false) } }
             defaults.removePersistentDomain(forName: suite)
         }
-        try preferences.saveProfile(id: nil, name: "Claude 代理", configuration: APIConfiguration(baseURL: "https://claude.example/custom", model: "claude-fixture", format: .claude), key: "claude-test-key")
+        try preferences.saveProfile(id: nil, name: "Claude 代理", configuration: APIConfiguration(baseURL: "https://claude.example/custom", model: "claude-fixture", format: .openAI), key: "claude-test-key")
         let claude = try XCTUnwrap(preferences.activeProfile)
-        try preferences.saveProfile(id: nil, name: "Gemini 代理", configuration: APIConfiguration(baseURL: "https://gemini.example/custom", model: "gemini-fixture", format: .gemini), key: "gemini-test-key")
+        try preferences.saveProfile(id: nil, name: "Gemini 代理", configuration: APIConfiguration(baseURL: "https://gemini.example/custom", model: "gemini-fixture", format: .openAI), key: "gemini-test-key")
         let gemini = try XCTUnwrap(preferences.activeProfile)
         XCTAssertEqual(preferences.profiles.count, 2)
         XCTAssertEqual(try preferences.profileKey(claude), "claude-test-key")
         XCTAssertEqual(try preferences.profileKey(gemini), "gemini-test-key")
         preferences.selectProfile(claude.id)
         let restored = Preferences(defaults: defaults)
-        XCTAssertEqual(restored.configuration.format, .claude)
+        XCTAssertEqual(restored.configuration.format, .openAI)
         XCTAssertEqual(restored.activeProfileID, claude.id)
         XCTAssertEqual(restored.configuration.baseURL, "https://claude.example/custom")
         preferences.deleteProfile(claude.id)
@@ -723,19 +865,19 @@ final class NativeServiceTests: XCTestCase {
             }
             defaults.removePersistentDomain(forName: suite)
         }
-        for format in APIFormat.allCases {
-            try preferences.saveProfile(id: nil, name: format.title, configuration: APIConfiguration(baseURL: "https://example.com", model: "fixture", format: format), key: "test-key-\(format.rawValue)")
+        for index in 1...3 {
+            try preferences.saveProfile(id: nil, name: "接口 \(index)", configuration: APIConfiguration(baseURL: "https://example.com", model: "fixture-\(index)"), key: "test-key-\(index)")
             credentials.insert(try XCTUnwrap(preferences.activeProfile?.credentialID))
         }
         try preferences.setCloudEnabled(true)
         preferences.profiles.compactMap(\.credentialID).forEach { credentials.insert($0) }
         let outgoing = try JSONDecoder().decode(CloudSettingsSnapshot.self, from: XCTUnwrap(cloud.payload))
         XCTAssertEqual(outgoing.profiles?.count, 3)
-        XCTAssertEqual(outgoing.configuration.format, .gemini)
+        XCTAssertEqual(outgoing.configuration.format, .openAI)
         XCTAssertFalse(String(data: cloud.payload!, encoding: .utf8)!.contains("test-key-"))
-        for profile in preferences.profiles { XCTAssertEqual(try preferences.profileKey(profile), "test-key-\(profile.configuration.format.rawValue)") }
+        for profile in preferences.profiles { XCTAssertEqual(try preferences.profileKey(profile), "test-key-\(profile.configuration.model.suffix(1))") }
         try preferences.setCloudEnabled(false)
-        for profile in preferences.profiles { XCTAssertEqual(try preferences.profileKey(profile), "test-key-\(profile.configuration.format.rawValue)") }
+        for profile in preferences.profiles { XCTAssertEqual(try preferences.profileKey(profile), "test-key-\(profile.configuration.model.suffix(1))") }
     }
 
     @MainActor func testEmptyInstallationWaitsForCloudInsteadOfPublishingDefaults() throws {

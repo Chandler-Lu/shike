@@ -32,6 +32,39 @@ final class NewFeatureUITests: XCTestCase {
             thenDragTo: app.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.15)))
         #endif
     }
+    func testSearchSettingsAutoSaveAndHomeUnchanged() {
+        let app = launch(extra: ["-seed-example"])
+        XCTAssertFalse(app.switches["searchEnabled"].exists)
+        section(2, name: "设置", app: app)
+        let api = app.buttons.matching(NSPredicate(format: "label CONTAINS %@", "模型与 API")).firstMatch
+        reveal(api, app: app); activate(api)
+        let toggle = app.switches["searchEnabled"]
+        for _ in 0..<14 where !toggle.isHittable { app.swipeUp() }
+        XCTAssertTrue(toggle.isHittable)
+        XCTAssertFalse(app.secureTextFields["searchKey"].exists)
+        activate(toggle)
+        XCTAssertFalse(app.textFields["searchURL"].exists)
+        let key = app.secureTextFields["searchKey"]
+        reveal(key, app: app); activate(key); key.typeText("fixture-search-key")
+        let hide = app.buttons["收起键盘"]
+        if hide.isHittable { activate(hide) }
+        let status = app.staticTexts["searchStatus"]
+        expectation(for: NSPredicate(format: "label CONTAINS %@", "已开启"), evaluatedWith: status)
+        waitForExpectations(timeout: 6)
+        capture("search-settings-enabled", app: app)
+        // Turn off without deleting the configuration, then on again.
+        for _ in 0..<8 where !toggle.isHittable { app.swipeDown() }
+        activate(toggle)
+        XCTAssertFalse(app.secureTextFields["searchKey"].exists)
+        activate(toggle)
+        XCTAssertTrue(status.label.contains("已开启"))
+        if app.buttons["section-0"].isHittable { activate(app.buttons["section-0"]) }
+        else { app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+        XCTAssertTrue(app.textViews["sourceText"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.switches["searchEnabled"].exists)
+        capture("search-home-unchanged", app: app)
+    }
+
     func testHomeKeyboardKeepsNavigationBarAtTop() {
         let app = launch()
         let source = app.textViews["sourceText"]

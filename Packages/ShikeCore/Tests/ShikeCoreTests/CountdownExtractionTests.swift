@@ -59,7 +59,7 @@ final class CountdownExtractionTests: XCTestCase {
         let many = String(data: try JSONSerialization.data(withJSONObject: ["countdowns": Array(repeating: ["title":"x","date":"2026-12-01"], count:51)]), encoding:.utf8)!
         XCTAssertThrowsError(try decode(many))
     }
-    func testAllThreeAPIFormatsUseCountdownProtocolWithoutSendingExistingCategories() async throws {
+    func testOpenAIUsesCountdownProtocolWithoutSendingExistingCategories() async throws {
         let config = URLSessionConfiguration.ephemeral; config.protocolClasses = [MockURLProtocol.self]
         let session = URLSession(configuration: config); defer { session.invalidateAndCancel() }
         let client = LLMClient(session: session)
@@ -77,8 +77,6 @@ final class CountdownExtractionTests: XCTestCase {
                 let envelope: [String:Any]
                 switch format {
                 case .openAI: envelope=["choices":[["message":["content":content],"finish_reason":"stop"]]]
-                case .claude: envelope=["content":[["type":"text","text":content]],"stop_reason":"end_turn"]
-                case .gemini: envelope=["candidates":[["content":["parts":[["text":content]]],"finishReason":"STOP"]]]
                 }
                 return (200, try JSONSerialization.data(withJSONObject: envelope))
             }
