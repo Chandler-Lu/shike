@@ -9,7 +9,7 @@ struct HistoryView: View {
     @State private var pushedSession: ImportSession?
     @State private var showingSession = false
     @FocusState private var searchFocused: Bool
-    private var usesColumns: Bool { workspaceWidth >= 880 && !dynamicTypeSize.isAccessibilitySize }
+    private var usesColumns: Bool { WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) }
     @Environment(\.scenePhase) private var scenePhase
     @ObservedObject var environment: AppEnvironment
     @State private var sessions: [ImportSession] = []

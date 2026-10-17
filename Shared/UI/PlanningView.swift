@@ -6,6 +6,7 @@ struct PlanningView: View {
     @ObservedObject var calendars: CalendarService
     @ObservedObject var preferences: Preferences
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var answer = ""
     @FocusState private var answerFocused: Bool
     @FocusState private var goalFocused: Bool
@@ -13,10 +14,10 @@ struct PlanningView: View {
     private var zone: TimeZone { TimeZone(identifier: controller.session.referenceTimeZone) ?? .current }
     private var calendar: Calendar { var value = Calendar(identifier: .gregorian); value.timeZone = zone; return value }
     var body: some View {
-        GeometryReader { geometry in
-        let wide = geometry.size.width >= 880
-        let columns = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 28)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
         NavigationStack {
+        GeometryReader { geometry in
+        let wide = WorkspaceLayout.usesColumns(width: geometry.size.width, dynamicTypeSize: dynamicTypeSize)
+        let columns = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 28)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
             ZStack {
                 PaperBackground()
                 ScrollViewReader { scroll in
@@ -131,7 +132,10 @@ struct PlanningView: View {
                                         Image(systemName: "arrow.up.circle.fill").font(.system(size: 34)).frame(width: 44, height: 44)
                                     }.disabled(controller.isBusy || answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                                         .accessibilityLabel("发送回答").accessibilityIdentifier("sendPlanningAnswer")
-                                }.id("answer").disabled(controller.isBusy)
+                                }
+                                // Leave room for the floating keyboard toolbar on compact displays.
+                                .padding(.bottom, answerFocused && PlatformSupport.usesSystemWorkspaceNavigation ? 54 : 0)
+                                .id("answer").disabled(controller.isBusy)
                             }
                             if plan?.proposalNeedsUpdate == true {
                                 NoteMessage(text: "下方保留上一版方案，继续回答后会更新。")
@@ -143,11 +147,18 @@ struct PlanningView: View {
                                 .frame(maxWidth: .infinity, alignment: .topLeading)
                         }.padding(22).frame(maxWidth: wide ? 1200 : 680).frame(maxWidth: .infinity)
                     }.scrollDismissesKeyboard(.interactively)
+                        .onChange(of: geometry.size) { _, _ in
+                            if answerFocused { scroll.scrollTo("answer", anchor: .bottom) }
+                        }
+                        .onChange(of: answerFocused) { _, focused in
+                            if focused { withAnimation { scroll.scrollTo("answer", anchor: .bottom) } }
+                        }
                         .onChange(of: controller.session.planning?.turns.count) { _, _ in
                             if controller.session.planning?.hasProposal != true { withAnimation { scroll.scrollTo("answer", anchor: .bottom) } }
                         }
                 }
             }.foregroundStyle(Notebook.ink)
+        }
                 .navigationTitle("帮我安排").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
@@ -163,7 +174,7 @@ struct PlanningView: View {
                     ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { answerFocused = false; goalFocused = false } }
                 }
                 .onDisappear { controller.persistReportingError() }
-        }.tint(Notebook.accent)
+                .tint(Notebook.accent)
         }
     }
     private func setTimeZone(_ identifier: String) {

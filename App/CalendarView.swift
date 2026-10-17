@@ -20,6 +20,7 @@ struct CalendarScreen: View {
     @State private var dayCache = CalendarDayCache()
     @State private var pageOffset: CGFloat = 0
     @State private var settlingPage = false
+    @State private var pagingRevision = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var filter = false
     @State private var selected: CalendarEventSnapshot?
@@ -72,7 +73,7 @@ struct CalendarScreen: View {
             } }
             .task(id: queryKey) { await load() }
             .onAppear { screenVisible = true; presentFinishedSummary() }
-            .onDisappear { screenVisible = false; drag = nil; pageOffset = 0; settlingPage = false; ignoreEventTapsUntil = .distantPast }
+            .onDisappear { screenVisible = false; cancelGeometryDependentInteraction() }
             .onChange(of: scenePhase) { _, phase in if phase == .active { calendars.refresh(); presentFinishedSummary() } }
             .onChange(of: summaryController.needsPresentation) { _, _ in presentFinishedSummary() }
             .onChange(of: summaryPresentationBlocked) { _, blocked in if !blocked { presentFinishedSummary() } }
@@ -144,12 +145,18 @@ struct CalendarScreen: View {
                 }
             }
         } else {
-            HStack {
-                previousPage
-                datePicker
-                nextPage
-                Spacer(minLength: 0)
-                todayButton
+            ViewThatFits(in: .horizontal) {
+                HStack {
+                    previousPage
+                    datePicker.fixedSize()
+                    nextPage
+                    Spacer(minLength: 0)
+                    todayButton.fixedSize()
+                }
+                VStack(spacing: 4) {
+                    datePicker
+                    HStack { previousPage; Spacer(); todayButton; Spacer(); nextPage }
+                }
             }
         }
     }
@@ -259,6 +266,15 @@ struct CalendarScreen: View {
                     guard drag == nil, Date.now >= ignoreEventTapsUntil, !showsSummary else { pageOffset = 0; return }
                     finishPaging(distance: distance, velocity: velocity, width: width + 42)
                 }))
+                .onChange(of: geometry.size) { _, _ in cancelGeometryDependentInteraction() }
+        }
+    }
+    private func cancelGeometryDependentInteraction() {
+        pagingRevision += 1
+        var transaction = Transaction(); transaction.disablesAnimations = true
+        withTransaction(transaction) {
+            drag = nil; pageOffset = 0; settlingPage = false
+            ignoreEventTapsUntil = .now.addingTimeInterval(0.35)
         }
     }
     private func pageStrip<Content: View>(width: CGFloat, paging: Bool, @ViewBuilder content: @escaping ([Date], Int) -> Content) -> some View {
@@ -276,9 +292,11 @@ struct CalendarScreen: View {
             withAnimation(reduceMotion ? nil : .snappy(duration: 0.2)) { pageOffset = 0 }; return
         }
         settlingPage = true
+        let revision = pagingRevision
         withAnimation(reduceMotion ? nil : .easeOut(duration: 0.18), completionCriteria: .logicallyComplete) {
             pageOffset = -CGFloat(direction) * width
         } completion: {
+            guard revision == pagingRevision else { return }
             var transaction = Transaction(); transaction.disablesAnimations = true
             withTransaction(transaction) { move(direction * count); pageOffset = 0; settlingPage = false }
         }

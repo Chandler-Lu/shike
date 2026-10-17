@@ -61,6 +61,8 @@ struct CalendarPageInteraction: UIViewRepresentable {
         var onChange: ((CGFloat) -> Void)?
         var onEnd: ((CGFloat, CGFloat) -> Void)?
         private weak var attachedWindow: UIWindow?
+        private var canvasSize: CGSize = .zero
+        private var windowSize: CGSize = .zero
         private lazy var pan: UIPanGestureRecognizer = {
             let value = UIPanGestureRecognizer(target: self, action: #selector(changed))
             value.maximumNumberOfTouches = 1
@@ -69,6 +71,17 @@ struct CalendarPageInteraction: UIViewRepresentable {
             return value
         }()
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let currentWindowSize = window?.bounds.size ?? .zero
+            if canvasSize != bounds.size || windowSize != currentWindowSize {
+                // A fold changes the meaning of translation. Never finish a stale swipe.
+                if pan.state == .began || pan.state == .changed {
+                    pan.isEnabled = false; pan.isEnabled = true
+                }
+                canvasSize = bounds.size; windowSize = currentWindowSize
+            }
+        }
         override func didMoveToWindow() {
             super.didMoveToWindow(); detach()
             if let window { window.addGestureRecognizer(pan); attachedWindow = window }
@@ -117,6 +130,8 @@ struct CalendarHoldInteraction: UIViewRepresentable {
         private weak var attachedWindow: UIWindow?
         private var ticker: CADisplayLink?
         private var pausedScrollViews: [UIScrollView] = []
+        private var canvasSize: CGSize = .zero
+        private var windowSize: CGSize = .zero
         private lazy var hold: UILongPressGestureRecognizer = {
             let value = UILongPressGestureRecognizer(target: self, action: #selector(changed))
             value.minimumPressDuration = 0.45; value.allowableMovement = 10
@@ -124,6 +139,16 @@ struct CalendarHoldInteraction: UIViewRepresentable {
             return value
         }()
         override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? { nil }
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            let currentWindowSize = window?.bounds.size ?? .zero
+            if canvasSize != bounds.size || windowSize != currentWindowSize {
+                if hold.state == .began || hold.state == .changed {
+                    hold.isEnabled = false; hold.isEnabled = true
+                }
+                canvasSize = bounds.size; windowSize = currentWindowSize
+            }
+        }
         override func didMoveToWindow() {
             super.didMoveToWindow()
             detach()

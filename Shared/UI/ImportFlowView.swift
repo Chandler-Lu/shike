@@ -21,7 +21,7 @@ struct ImportFlowView: View {
     @FocusState private var textFocused: Bool
 
     var body: some View {
-        let wide = workspaceWidth >= 880 && !isExtension && !isPlanningContent && !dynamicTypeSize.isAccessibilitySize
+        let wide = WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) && !isExtension && !isPlanningContent
         let columns = wide ? AnyLayout(HStackLayout(alignment: .top, spacing: 28)) : AnyLayout(VStackLayout(alignment: .leading, spacing: 20))
         columns {
             if !isPlanningContent {
@@ -209,7 +209,7 @@ struct ImportFlowView: View {
                 .presentationDetents([.large]).workspaceSheet()
         }
         .sheet(isPresented: Binding(get: { controller.showsPlanning && !isPlanningContent && !isExtension }, set: { if !$0 && !isPlanningContent { controller.showsPlanning = false } })) {
-            PlanningView(controller: controller, calendars: calendars, preferences: controller.environment.preferences).workspaceSheet()
+            PlanningView(controller: controller, calendars: calendars, preferences: controller.environment.preferences).workspaceSheet(wide: true)
         }
         .toolbar {
             if !isPlanningContent && !controller.showsPlanning {

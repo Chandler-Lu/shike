@@ -6,7 +6,7 @@ struct CountdownScreen: View {
     @Environment(\.workspaceWidth) private var workspaceWidth
     @EnvironmentObject private var workspace: Workspace
     @State private var inlineSelection: Countdown?
-    private var usesColumns: Bool { workspaceWidth >= 880 && !dynamicTypeSize.isAccessibilitySize }
+    private var usesColumns: Bool { WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) }
     @ObservedObject var store: CountdownStore
     let coordinator: CountdownCoordinator
     @ObservedObject var preferences: Preferences
@@ -65,7 +65,7 @@ struct CountdownScreen: View {
                             Text("全部日子").tag("all"); Text("未分类").tag("none")
                             ForEach(store.categories) { Text($0.name).tag($0.id.uuidString) }
                         }.tint(Notebook.accent).accessibilityIdentifier("countdownCategoryFilter")
-                        categoryLayout {
+                        categorySummaryLayout {
                             Text("\(entries.count) 个日子").font(.caption).foregroundStyle(Notebook.secondaryInk)
                             if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                             Menu {
@@ -268,7 +268,13 @@ struct CountdownScreen: View {
         }
     }
     private var categoryLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(spacing: 16))
+        let listWidth = usesColumns ? workspaceWidth / 2 : workspaceWidth
+        return dynamicTypeSize.isAccessibilitySize || listWidth < 400
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(spacing: 16))
+    }
+    private var categorySummaryLayout: AnyLayout {
+        dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(spacing: 16))
     }
 }
 

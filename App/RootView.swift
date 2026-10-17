@@ -28,7 +28,7 @@ struct RootView: View {
     }
     var body: some View {
         GeometryReader { geometry in
-            let showsSidebar = geometry.size.width >= 820 && workspace.sidebarOverride != false
+            let showsSidebar = !PlatformSupport.usesSystemWorkspaceNavigation && geometry.size.width >= 820 && workspace.sidebarOverride != false
             VStack(spacing: 0) {
                 modelJobBanner
                 HStack(spacing: 0) {
@@ -36,19 +36,17 @@ struct RootView: View {
                         WorkspaceSidebar(workspace: workspace).frame(width: 220)
                     }
                     TabView(selection: $workspace.selection) {
-                        NavigationStack { HomeView(controller: controller) }
+                        NavigationStack { WorkspaceViewport { HomeView(controller: controller) } }
                             .tabItem { Label("导入", systemImage: "square.and.pencil") }.tag(0)
-                        NavigationStack { CalendarScreen(calendars: environment.calendars, preferences: environment.preferences, countdowns: environment.countdowns, reminders: countdownCoordinator.reminders) }
+                        NavigationStack { WorkspaceViewport { CalendarScreen(calendars: environment.calendars, preferences: environment.preferences, countdowns: environment.countdowns, reminders: countdownCoordinator.reminders) } }
                             .tabItem { Label("日历", systemImage: "calendar") }.tag(3)
-                        NavigationStack { CountdownScreen(store: environment.countdowns, coordinator: countdownCoordinator, preferences: environment.preferences, navigation: countdownNavigation) }
+                        NavigationStack { WorkspaceViewport { CountdownScreen(store: environment.countdowns, coordinator: countdownCoordinator, preferences: environment.preferences, navigation: countdownNavigation) } }
                             .tabItem { Label("倒数日", systemImage: "heart.text.clipboard") }.tag(4)
-                        NavigationStack { HistoryView(environment: environment) }
+                        NavigationStack { WorkspaceViewport { HistoryView(environment: environment) } }
                             .tabItem { Label("记录", systemImage: "book.closed") }.tag(1)
-                        NavigationStack { SettingsView(environment: environment, countdownSync: countdownCoordinator.sync) }
+                        NavigationStack { WorkspaceViewport { SettingsView(environment: environment, countdownSync: countdownCoordinator.sync) } }
                             .tabItem { Label("设置", systemImage: "slider.horizontal.3") }.tag(2)
-                    }.toolbar(showsSidebar ? .hidden : .visible, for: .tabBar)
-                        .background(WorkspaceTabBarVisibility(hidden: showsSidebar))
-                        .environment(\.workspaceWidth, geometry.size.width - (showsSidebar ? 220 : 0))
+                    }.workspaceTabs(hidesLegacyBar: showsSidebar)
                 }
                 .overlay(alignment: .topLeading) {
                     if PlatformSupport.isMac && geometry.size.width >= 820 {
@@ -156,6 +154,7 @@ struct RootView: View {
 
 struct HomeView: View {
     @Environment(\.workspaceWidth) private var workspaceWidth
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @EnvironmentObject private var workspace: Workspace
     @State private var showFiles = false
     @State private var dropTargeted = false
@@ -185,11 +184,11 @@ struct HomeView: View {
                 VStack(alignment: .leading, spacing: 24) {
                     HStack(alignment: .top, spacing: 20) {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("把零散安排，\n收进日历。").font(Notebook.handwriting(34, relativeTo: .largeTitle)).lineSpacing(3)
+                            Text("把零散安排，\n收进日历。").font(Notebook.handwriting(verticalSizeClass == .compact ? 26 : 34, relativeTo: .largeTitle)).lineSpacing(3)
                             Text("一段文字，一张截图，一天井井有条。")
                                 .font(.subheadline).foregroundStyle(Notebook.secondaryInk).fixedSize(horizontal: false, vertical: true)
                         }.frame(maxWidth: .infinity, alignment: .leading)
-                        if !dynamicTypeSize.isAccessibilitySize { CalendarDoodle().padding(.top, 13) }
+                        if !dynamicTypeSize.isAccessibilitySize && workspaceWidth >= 360 && verticalSizeClass != .compact { CalendarDoodle().padding(.top, 13) }
                     }.padding(.top, 5)
 
                     importLayout {
@@ -234,7 +233,7 @@ struct HomeView: View {
                                    onVoiceInput: toggleVoiceInput, voiceRecording: voice.recording,
                                    voicePreparing: voice.preparing, voiceFinishing: voice.finishing,
                                    voiceInputEnabled: !controller.isBusy && !isLoadingInput && controller.session.savedCount == 0)
-                }.padding(.horizontal, 22).padding(.bottom, 32).frame(maxWidth: workspaceWidth >= 880 ? 1200 : 680)
+                }.padding(.horizontal, 22).padding(.bottom, 32).frame(maxWidth: WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) ? 1200 : 680)
                     .frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively)
         }.foregroundStyle(Notebook.ink)
@@ -345,7 +344,7 @@ struct HomeView: View {
     }
 
     private var importLayout: AnyLayout {
-        dynamicTypeSize.isAccessibilitySize ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+        dynamicTypeSize.isAccessibilitySize || workspaceWidth < 340 ? AnyLayout(VStackLayout(spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
     }
 
     private func toggleVoiceInput() {

@@ -2,6 +2,13 @@ import SwiftUI
 import UIKit
 
 enum PlatformSupport {
+    static var usesSystemWorkspaceNavigation: Bool {
+        #if targetEnvironment(macCatalyst)
+        false
+        #else
+        if #available(iOS 27.1, *) { true } else { false }
+        #endif
+    }
     static var isMac: Bool {
         #if targetEnvironment(macCatalyst)
         true
@@ -24,13 +31,49 @@ extension EnvironmentValues {
     }
 }
 
+enum WorkspaceLayout {
+    static func usesColumns(width: CGFloat, dynamicTypeSize: DynamicTypeSize) -> Bool {
+        width >= 760 && !dynamicTypeSize.isAccessibilitySize
+    }
+}
+
+/// Measure inside navigation, after system bars and asymmetric safe areas.
+/// The content keeps its identity while a fold, sidebar or keyboard resizes it.
+struct WorkspaceViewport<Content: View>: View {
+    @ViewBuilder let content: Content
+    var body: some View {
+        GeometryReader { geometry in
+            content
+                .environment(\.workspaceWidth, geometry.size.width)
+        }
+    }
+}
+
 extension View {
-    /// UIKit sheets already adapt to iPad. Catalyst needs a usable initial canvas.
-    @ViewBuilder func workspaceSheet() -> some View {
+    @ViewBuilder func workspaceTabs(hidesLegacyBar: Bool) -> some View {
         #if targetEnvironment(macCatalyst)
-        self.frame(minWidth: 560, idealWidth: 720, minHeight: 540, idealHeight: 740)
+        self.toolbar(hidesLegacyBar ? .hidden : .visible, for: .tabBar)
+            .background(WorkspaceTabBarVisibility(hidden: hidesLegacyBar))
         #else
-        self
+        if #available(iOS 27.1, *) {
+            self.tabViewStyle(.sidebarAdaptable).defaultTabBarPlacement(.tabBar)
+        } else {
+            self.toolbar(hidesLegacyBar ? .hidden : .visible, for: .tabBar)
+                .background(WorkspaceTabBarVisibility(hidden: hidesLegacyBar))
+        }
+        #endif
+    }
+
+    /// UIKit sheets already adapt to iPad. Catalyst needs a usable initial canvas.
+    @ViewBuilder func workspaceSheet(wide: Bool = false) -> some View {
+        #if targetEnvironment(macCatalyst)
+        self.frame(minWidth: 560, idealWidth: wide ? 1040 : 720, minHeight: 540, idealHeight: 740)
+        #else
+        if #available(iOS 18.0, *), wide {
+            self.frame(idealWidth: 1040, idealHeight: 780).presentationSizing(.fitted)
+        } else {
+            self
+        }
         #endif
     }
 }

@@ -12,7 +12,8 @@ final class PlatformWorkspaceUITests: XCTestCase {
     private func section(_ id: Int, _ name: String, app: XCUIApplication) {
         let sidebar = app.buttons["section-\(id)"]
         if sidebar.isHittable { sidebar.activateControl() }
-        else { app.tabBars.buttons[name].activateControl() }
+        else if app.tabBars.buttons[name].isHittable { app.tabBars.buttons[name].activateControl() }
+        else { app.buttons[name].firstMatch.activateControl() }
     }
     private func capture(_ name: String, _ app: XCUIApplication) {
         let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
@@ -50,13 +51,17 @@ final class PlatformWorkspaceUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = launch()
-        if !app.buttons["section-0"].isHittable {
-            // iPadOS windowing may restore a narrow window. Double-tap its title bar.
-            app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.025)).doubleTap()
+        if #available(iOS 27.1, *) {
+            XCTAssertTrue(app.tabBars.buttons["导入"].isHittable || app.buttons["导入"].firstMatch.isHittable)
+        } else {
+            if !app.buttons["section-0"].isHittable {
+                // Older iPadOS may restore a narrow window with our legacy navigation.
+                app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.025)).doubleTap()
+            }
+            let sidebar = app.buttons["section-0"]
+            XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
+            XCTAssertTrue(sidebar.isHittable)
         }
-        let sidebar = app.buttons["section-0"]
-        XCTAssertTrue(sidebar.waitForExistence(timeout: 5))
-        XCTAssertTrue(sidebar.isHittable)
         capture("ipad-wide-workspace", app)
         section(4, "倒数日", app: app)
         XCTAssertTrue(app.otherElements["countdownDetailPane"].exists || app.staticTexts["选一个日子，慢慢翻看。"].exists)
@@ -98,6 +103,73 @@ final class PlatformWorkspaceUITests: XCTestCase {
         XCUIDevice.shared.orientation = .landscapeLeft
         XCTAssertTrue((title.value as? String ?? "").contains("unsaved-marker"))
         app.buttons["cancelCountdownEditing"].activateControl()
+    }
+
+    func testRotationPreservesUnsentPlanningReplyAndCountdownEdit() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        defer { XCUIDevice.shared.orientation = .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-seed-example", "-planning-fixture", "-countdown-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let plan = app.buttons["planEvents"]
+        XCTAssertTrue(plan.waitForExistence(timeout: 10)); reveal(plan, app: app); plan.tap()
+        let start = app.buttons["startPlanning"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5)); reveal(start, app: app); start.tap()
+        let option = app.buttons["planningOption-每次 30 分钟，晚上安排"]
+        XCTAssertTrue(option.waitForExistence(timeout: 8)); reveal(option, app: app); option.tap()
+        let answer = app.descendants(matching: .any)["planningAnswer"]
+        XCTAssertTrue(answer.waitForExistence(timeout: 8)); reveal(answer, app: app); answer.tap(); answer.typeText("duo-unsent-reply")
+        for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            // The compositor can still be rotating after accessibility updates.
+            Thread.sleep(forTimeInterval: 1)
+            XCTAssertTrue((answer.value as? String ?? "").contains("duo-unsent-reply"))
+            XCTAssertEqual(app.buttons.matching(identifier: "收起键盘").count, 1)
+            capture("adaptive-planning-\(orientation.rawValue)", app)
+        }
+        app.buttons["收起键盘"].tap()
+        app.buttons["closePlanning"].tap()
+        section(4, "倒数日", app: app)
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "countdown-")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        let edit = app.buttons["editCountdown"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
+        let title = app.textFields["countdownTitle"]
+        XCTAssertTrue(title.waitForExistence(timeout: 5)); title.tap(); title.typeText(" duo-unsaved-title")
+        for orientation in [UIDeviceOrientation.landscapeLeft, .portrait] {
+            XCUIDevice.shared.orientation = orientation
+            Thread.sleep(forTimeInterval: 1)
+            XCTAssertTrue((title.value as? String ?? "").contains("duo-unsaved-title"))
+            capture("adaptive-countdown-editor-\(orientation.rawValue)", app)
+        }
+        app.buttons["cancelCountdownEditing"].tap()
+    }
+
+    func testPlanningReplyFitsCurrentViewportWithKeyboard() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-seed-example", "-planning-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let plan = app.buttons["planEvents"]
+        XCTAssertTrue(plan.waitForExistence(timeout: 10)); reveal(plan, app: app); plan.tap()
+        let start = app.buttons["startPlanning"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5)); reveal(start, app: app); start.tap()
+        let answer = app.descendants(matching: .any)["planningAnswer"]
+        XCTAssertTrue(answer.waitForExistence(timeout: 8)); reveal(answer, app: app)
+        answer.tap(); answer.typeText("viewport-reply")
+        let keyboard = app.keyboards.firstMatch
+        XCTAssertTrue(keyboard.waitForExistence(timeout: 5))
+        XCTAssertGreaterThan(keyboard.frame.height, 100)
+        XCTAssertLessThan(keyboard.frame.minY, app.frame.maxY)
+        let send = app.buttons["sendPlanningAnswer"]
+        print("Planning composer bounds: input=\(answer.frame), send=\(send.frame), keyboard=\(keyboard.frame), app=\(app.frame)")
+        capture("planning-current-viewport-keyboard", app)
+        XCTAssertTrue(send.isHittable)
+        XCTAssertLessThanOrEqual(answer.frame.maxY, keyboard.frame.minY + 2)
+        XCTAssertLessThanOrEqual(send.frame.maxY, keyboard.frame.minY + 2)
+        XCTAssertGreaterThanOrEqual(answer.frame.minX, app.frame.minX)
+        XCTAssertLessThanOrEqual(send.frame.maxX, app.frame.maxX)
     }
     #else
     func testMacKeyboardNavigationAndFilePicker() throws {
