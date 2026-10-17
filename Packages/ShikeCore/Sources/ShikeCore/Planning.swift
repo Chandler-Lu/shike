@@ -119,6 +119,7 @@ public struct CalendarEventSnapshot: Identifiable, Equatable, Sendable {
     public var notes: String
     public var timeZone: String
     public var blocksTime: Bool
+    public var isRecurring: Bool
     /// All-day entries remain visible in the calendar but never reserve planning time.
     public var blocksPlanningTime: Bool { blocksTime && !allDay }
     public var interval: DateInterval { DateInterval(start: start, end: max(start, end)) }
@@ -137,10 +138,10 @@ public struct CalendarEventSnapshot: Identifiable, Equatable, Sendable {
     }
     public init(eventID: String, itemID: String, calendarID: String, title: String, start: Date, end: Date,
                 allDay: Bool = false, location: String = "", notes: String = "", timeZone: String = TimeZone.current.identifier,
-                blocksTime: Bool = true) {
+                blocksTime: Bool = true, isRecurring: Bool = false) {
         self.eventID = eventID; self.itemID = itemID; self.calendarID = calendarID; self.title = title
         self.start = start; self.end = end; self.allDay = allDay; self.location = location; self.notes = notes
-        self.timeZone = timeZone; self.blocksTime = blocksTime
+        self.timeZone = timeZone; self.blocksTime = blocksTime; self.isRecurring = isRecurring
     }
 }
 

@@ -4,6 +4,27 @@ import ShikeCore
 @testable import Shike
 
 final class CountdownServiceTests: XCTestCase {
+    @MainActor func testConvertedBatchIsAtomicDurableAndRetriesPreserveEdits() throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("days.json"), store = CountdownStore(url: url)
+        var draft = EventDraft(); draft.title = "旅行"; draft.start = .now
+        let candidate = try CountdownConversion.from(draft)
+        var invalid = candidate; invalid.id = UUID(); invalid.title = ""; invalid.sourceIdentifier = "another"
+        XCTAssertThrowsError(try store.insertConverted([candidate, invalid])); XCTAssertTrue(store.entries.isEmpty)
+        try store.insertConverted([candidate])
+        var changed = try XCTUnwrap(store.entries.first); changed.title = "我修改的旅行"; changed.cardColor = .sage
+        try store.save(changed)
+        let reopened = CountdownStore(url: url)
+        let retried = try reopened.insertConverted([CountdownConversion.from(draft)])
+        XCTAssertEqual(retried, [changed]); XCTAssertEqual(reopened.entries, [changed])
+        XCTAssertTrue(reopened.document.pending.contains(changed.id))
+        try reopened.delete(changed.id)
+        let recreated = try reopened.insertConverted([CountdownConversion.from(draft)])
+        XCTAssertEqual(recreated.count, 1); XCTAssertNotEqual(recreated[0].id, changed.id)
+        XCTAssertEqual(reopened.entries.count, 1)
+    }
     @MainActor func testCardColorIsDurableAndQueuesSync() throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

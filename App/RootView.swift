@@ -37,7 +37,7 @@ struct RootView: View {
                     }
                     TabView(selection: $workspace.selection) {
                         NavigationStack { WorkspaceViewport { HomeView(controller: controller) } }
-                            .tabItem { Label("导入", systemImage: "square.and.pencil") }.tag(0)
+                            .tabItem { Label("计划", systemImage: "square.and.pencil") }.tag(0)
                         NavigationStack { WorkspaceViewport { CalendarScreen(calendars: environment.calendars, preferences: environment.preferences, countdowns: environment.countdowns, reminders: countdownCoordinator.reminders) } }
                             .tabItem { Label("日历", systemImage: "calendar") }.tag(3)
                         NavigationStack { WorkspaceViewport { CountdownScreen(store: environment.countdowns, coordinator: countdownCoordinator, preferences: environment.preferences, navigation: countdownNavigation) } }

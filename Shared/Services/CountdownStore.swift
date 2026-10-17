@@ -100,6 +100,28 @@ import ShikeCore
         value.records.removeAll { $0.id == record.id }; value.records.append(record); value.pending.insert(record.id)
         try commit(value)
     }
+    /// Atomic, retryable conversion. Existing user edits always win over a repeated import.
+    @discardableResult func insertConverted(_ candidates: [Countdown]) throws -> [Countdown] {
+        guard !candidates.isEmpty, candidates.count <= 50,
+              candidates.allSatisfy({ $0.sourceIdentifier?.isEmpty == false }),
+              Set(candidates.compactMap(\.sourceIdentifier)).count == candidates.count else {
+            throw ShikeError.message("请选择 1–50 个不同日程加入倒数日。")
+        }
+        for entry in candidates { try entry.validate() }
+        var value = document
+        var result: [Countdown] = []
+        for candidate in candidates {
+            if let existing = entries.first(where: { $0.sourceIdentifier == candidate.sourceIdentifier }) {
+                result.append(existing)
+            } else {
+                guard !value.records.contains(where: { $0.id == candidate.id }) else { throw ShikeError.message("倒数日编号重复，请重新操作。") }
+                value.records.append(CountdownRecord(candidate)); value.pending.insert(candidate.id)
+                result.append(candidate)
+            }
+        }
+        if value.records.count != document.records.count { try commit(value) }
+        return result
+    }
     /// Merge only missing IDs. Same-name categories retain the existing category ID.
     func importBackup(_ backup: AppDataExport, notify: Bool = true) throws -> Int {
         var value = document

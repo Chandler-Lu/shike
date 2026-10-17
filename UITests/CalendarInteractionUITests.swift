@@ -1,6 +1,94 @@
 import XCTest
 
 final class CalendarInteractionUITests: XCTestCase {
+    private func launchDeletionFixture(_ arguments: [String] = []) -> XCUIApplication {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"] + arguments
+        app.launch()
+        if app.buttons["section-3"].isHittable { activate(app.buttons["section-3"]) }
+        else { activate(app.tabBars.buttons["日历"]) }
+        XCTAssertTrue(app.segmentedControls["calendarRange"].waitForExistence(timeout: 8))
+        activate(app.segmentedControls["calendarRange"].buttons["当天"])
+        return app
+    }
+
+    func testDetailDeleteIsLastActionCanCancelAndClosesAfterDeleting() {
+        let app = launchDeletionFixture()
+        let event = app.buttons["calendarEvent-demo-0"]
+        XCTAssertTrue(event.waitForExistence(timeout: 8)); activate(event)
+        let delete = app.buttons["deleteCalendarEvent"], convert = app.buttons["calendarEventToCountdown"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5))
+        XCTAssertGreaterThanOrEqual(delete.frame.minY, convert.frame.maxY)
+        activate(delete)
+        let cancel = app.alerts.buttons["取消"]
+        XCTAssertTrue(cancel.waitForExistence(timeout: 5)); activate(cancel)
+        XCTAssertTrue(delete.isHittable)
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "calendar-detail-delete"; shot.lifetime = .keepAlways; add(shot)
+        activate(delete); activate(app.alerts.buttons["删除日程"])
+        XCTAssertTrue(delete.waitForNonExistence(timeout: 8)); XCTAssertTrue(event.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(app.buttons["addCalendarEvent"].isHittable)
+    }
+
+    func testReadonlyEventHasNoDeleteAndAllDayEventCanBeDeleted() {
+        let app = launchDeletionFixture(["-calendar-all-day-fixture"])
+        let allDay = app.buttons["calendarAllDay-all-day-0-0"]
+        XCTAssertTrue(allDay.waitForExistence(timeout: 8)); activate(allDay)
+        let delete = app.buttons["deleteCalendarEvent"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5)); activate(delete); activate(app.alerts.buttons["删除日程"])
+        XCTAssertTrue(delete.waitForNonExistence(timeout: 8)); XCTAssertTrue(allDay.waitForNonExistence(timeout: 5))
+        activate(app.segmentedControls["calendarRange"].buttons["3 天"])
+        let readonly = app.buttons["calendarEvent-demo-2"]
+        XCTAssertTrue(readonly.waitForExistence(timeout: 8)); activate(readonly)
+        XCTAssertTrue(app.buttons["calendarEventToCountdown"].waitForExistence(timeout: 5))
+        XCTAssertFalse(delete.exists); XCTAssertFalse(app.buttons["editCalendarEvent"].exists)
+    }
+
+    func testDetailDeletionOffersBothRecurringScopesAndKeepsPastEvents() {
+        let app = launchDeletionFixture(["-calendar-recurring-fixture"])
+        let today = app.buttons["calendarEvent-repeat-0"]
+        XCTAssertTrue(today.waitForExistence(timeout: 8)); activate(today)
+        activate(app.buttons["deleteCalendarEvent"])
+        let current = app.alerts.buttons["仅删除当前这一次"], future = app.alerts.buttons["删除当前及之后"]
+        XCTAssertTrue(current.waitForExistence(timeout: 5)); XCTAssertTrue(future.exists)
+        activate(future)
+        XCTAssertTrue(app.buttons["deleteCalendarEvent"].waitForNonExistence(timeout: 8)); XCTAssertTrue(today.waitForNonExistence(timeout: 5))
+        activate(app.buttons["下一页"])
+        XCTAssertTrue(app.buttons["calendarEvent-demo-1"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.buttons["calendarEvent-repeat-1"].exists)
+        activate(app.buttons["上一页"]); activate(app.buttons["上一页"])
+        let previous = app.buttons["calendarEvent-repeat--1"]
+        XCTAssertTrue(previous.waitForExistence(timeout: 5)); activate(previous)
+        activate(app.buttons["deleteCalendarEvent"]); activate(app.alerts.buttons["仅删除当前这一次"])
+        XCTAssertTrue(app.buttons["deleteCalendarEvent"].waitForNonExistence(timeout: 8)); XCTAssertTrue(previous.waitForNonExistence(timeout: 5))
+    }
+
+    func testConvertCalendarEventKeepThenDeleteLeavesOneCountdown() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-calendar-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.buttons["section-3"].isHittable { activate(app.buttons["section-3"]) }
+        else { activate(app.tabBars.buttons["日历"]) }
+        activate(app.segmentedControls["calendarRange"].buttons["当天"])
+        let event = app.buttons["calendarEvent-demo-0"]
+        XCTAssertTrue(event.waitForExistence(timeout: 8)); activate(event)
+        let convert = app.buttons["calendarEventToCountdown"]
+        XCTAssertTrue(convert.waitForExistence(timeout: 5)); activate(convert)
+        let keep = app.buttons["保留日程"]
+        XCTAssertTrue(keep.waitForExistence(timeout: 5)); activate(keep)
+        XCTAssertTrue(app.staticTexts["倒数日已保存，原日程已保留。"].waitForExistence(timeout: 5))
+        activate(convert)
+        let delete = app.alerts.buttons["删除日程"]
+        XCTAssertTrue(delete.waitForExistence(timeout: 5)); activate(delete)
+        XCTAssertTrue(convert.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(event.waitForNonExistence(timeout: 5))
+        if app.buttons["section-4"].isHittable { activate(app.buttons["section-4"]) }
+        else { activate(app.tabBars.buttons["倒数日"]) }
+        XCTAssertTrue(app.staticTexts["1 个日子"].waitForExistence(timeout: 5))
+        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = "converted-calendar-countdown"; shot.lifetime = .keepAlways; add(shot)
+    }
+
     func testHorizontalSwipesPageDatesWithoutChangingVerticalScrollBehavior() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -79,10 +167,22 @@ final class CalendarInteractionUITests: XCTestCase {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-ui-testing", "-native-calendar-testing", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        addUIInterruptionMonitor(withDescription: "Calendar access") { alert in
+            let allow = alert.buttons.matching(NSPredicate(format: "label IN %@", ["允许完全访问", "Allow Full Access"])).firstMatch
+            if allow.exists { allow.tap(); return true }
+            return false
+        }
         app.launch()
         let sidebar = app.buttons["section-3"]
         if sidebar.isHittable { activate(sidebar) } else { activate(app.tabBars.buttons["日历"]) }
-        if app.buttons["calendarGrantAccess"].isHittable { activate(app.buttons["calendarGrantAccess"]) }
+        if app.buttons["calendarGrantAccess"].isHittable {
+            activate(app.buttons["calendarGrantAccess"])
+            let allow = XCUIApplication(bundleIdentifier: "com.apple.springboard").buttons.matching(
+                NSPredicate(format: "label IN %@", ["允许完全访问", "Allow Full Access"])).firstMatch
+            if allow.waitForExistence(timeout: 5) { activate(allow) }
+            if app.buttons["calendarGrantAccess"].exists { app.tap() }
+            XCTAssertTrue(app.buttons["calendarGrantAccess"].waitForNonExistence(timeout: 10), app.debugDescription)
+        }
         activate(app.segmentedControls["calendarRange"].buttons["当天"])
         activate(app.buttons["addCalendarEvent"])
         let title = (isAllDay ? "全天删除回归 " : "定时删除回归 ") + UUID().uuidString.prefix(6)

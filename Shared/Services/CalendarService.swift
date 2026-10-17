@@ -11,6 +11,8 @@ struct CalendarChoice: Identifiable {
     var reference: CalendarReference { CalendarReference(title: title, account: account) }
 }
 
+enum CalendarDeletionScope { case occurrence, futureOccurrences }
+
 @MainActor final class CalendarService: ObservableObject {
     let store = EKEventStore()
     @Published private(set) var calendars: [CalendarChoice] = []
@@ -21,6 +23,8 @@ struct CalendarChoice: Identifiable {
     private var demoEvents: [String: EventDraft] = [:]
     private var movedDemoEvents: [String: CalendarEventSnapshot] = [:]
     private var queriedDemoEvents: [String: CalendarEventSnapshot] = [:]
+    private var deletedDemoOccurrences: Set<String> = []
+    private var deletedDemoSeries: [CalendarEventSnapshot] = []
     private let useDemo: Bool
     private let reader = CalendarQueryWorker()
     private var fixtureEvents: [CalendarEventSnapshot]
@@ -199,6 +203,13 @@ struct CalendarChoice: Identifiable {
                                                      title: ["跨天出行", "全天会议", "休假", "第四条全天日程"][index], start: start, end: end, allDay: true)
                     }
                 }
+                if ProcessInfo.processInfo.arguments.contains("-calendar-recurring-fixture") {
+                    fixtures += (-1...1).map { offset in
+                        let start = Calendar.current.date(byAdding: .day, value: offset, to: day)!.addingTimeInterval(3600 * 12)
+                        return CalendarEventSnapshot(eventID: "repeat-\(offset)", itemID: "repeat-series", calendarID: "test-work",
+                            title: "每日读书", start: start, end: start.addingTimeInterval(1800), isRecurring: true)
+                    }
+                }
             }
             #endif
             events = fixtures + demoEvents.values.compactMap { draft in
@@ -210,7 +221,7 @@ struct CalendarChoice: Identifiable {
         guard authorized else { throw ShikeError.message("日历访问已关闭。") }
         let current = useDemo ? events.map { movedDemoEvents[$0.eventID] ?? $0 } : events
         if useDemo { for event in current { queriedDemoEvents[event.eventID] = event } }
-        return current.filter { ids.contains($0.calendarID) && Scheduling.overlaps($0.interval, interval) }
+        return current.filter { !isDemoDeleted($0) && ids.contains($0.calendarID) && Scheduling.overlaps($0.interval, interval) }
             .sorted { ($0.start, $0.id) < ($1.start, $1.id) }
     }
 
@@ -240,14 +251,70 @@ struct CalendarChoice: Identifiable {
 
     /// Resolve this occurrence in the editing store; never use an EKEvent from the background store.
     func editableEvent(_ snapshot: CalendarEventSnapshot) throws -> EKEvent {
+        let event = try resolvedEvent(snapshot)
+        guard event.calendar.allowsContentModifications else { throw ShikeError.message("这个日历只支持查看。") }
+        return event
+    }
+
+    private func resolvedEvent(_ snapshot: CalendarEventSnapshot) throws -> EKEvent {
         guard authorized else { throw ShikeError.message("日历权限已关闭。") }
         guard let calendar = store.calendar(withIdentifier: snapshot.calendarID) else { throw ShikeError.message("日历已不可用，请刷新。") }
         let predicate = store.predicateForEvents(withStart: snapshot.start.addingTimeInterval(-1), end: max(snapshot.end, snapshot.start.addingTimeInterval(1)), calendars: [calendar])
         guard let event = store.events(matching: predicate).first(where: {
             ($0.eventIdentifier == snapshot.eventID || $0.calendarItemIdentifier == snapshot.itemID) && $0.startDate == snapshot.start
         }) else { throw ShikeError.message("这个事件已被移动或删除，请刷新日历。") }
-        guard event.calendar.allowsContentModifications else { throw ShikeError.message("这个日历只支持查看。") }
         return event
+    }
+
+    /// Refresh this occurrence before conversion, including readable subscription calendars.
+    func currentSnapshot(_ snapshot: CalendarEventSnapshot) throws -> CalendarEventSnapshot {
+        guard authorized else { throw ShikeError.message("日历权限已关闭。") }
+        if useDemo {
+            let saved = demoEvents[snapshot.eventID].flatMap { draft -> CalendarEventSnapshot? in
+                guard let start = draft.start, let end = draft.end else { return nil }
+                return CalendarEventSnapshot(eventID: snapshot.eventID, itemID: draft.calendarItemIdentifier ?? snapshot.itemID,
+                    calendarID: draft.calendarID ?? snapshot.calendarID, title: draft.title, start: start, end: end,
+                    allDay: draft.isAllDay, location: draft.location, notes: draft.notes, timeZone: draft.timeZoneIdentifier)
+            }
+            guard let current = movedDemoEvents[snapshot.eventID] ?? saved ?? queriedDemoEvents[snapshot.eventID] ?? fixtureEvents.first(where: { $0.id == snapshot.id }),
+                  current.start == snapshot.start, !isDemoDeleted(current) else {
+                throw ShikeError.message("这个事件已被移动或删除，请刷新日历。")
+            }
+            return current
+        }
+        let event = try resolvedEvent(snapshot)
+        return CalendarEventSnapshot(eventID: event.eventIdentifier ?? event.calendarItemIdentifier,
+            itemID: event.calendarItemIdentifier, calendarID: event.calendar.calendarIdentifier,
+            title: event.title ?? "未命名日程", start: event.startDate, end: event.endDate, allDay: event.isAllDay,
+            location: event.location ?? "", notes: event.notes ?? "", timeZone: event.timeZone?.identifier ?? TimeZone.current.identifier,
+            isRecurring: event.hasRecurrenceRules || event.isDetached)
+    }
+
+    /// Existing callers delete one occurrence; a future range requires an explicit choice.
+    func deleteOccurrence(_ snapshot: CalendarEventSnapshot, scope: CalendarDeletionScope = .occurrence) throws {
+        guard authorized, calendars.contains(where: { $0.id == snapshot.calendarID }) else {
+            throw ShikeError.message("这个日历只支持查看，或日历访问权限已关闭。")
+        }
+        let current = try currentSnapshot(snapshot)
+        guard current.title == snapshot.title, current.end == snapshot.end, current.allDay == snapshot.allDay,
+              current.location == snapshot.location, current.notes == snapshot.notes, current.timeZone == snapshot.timeZone,
+              current.isRecurring == snapshot.isRecurring else {
+            throw ShikeError.message("这个日程刚刚被修改，请重新打开详情后再删除。")
+        }
+        guard scope != .futureOccurrences || current.isRecurring else { throw ShikeError.message("这个日程已不再重复，请重新打开详情。") }
+        if useDemo {
+            if scope == .futureOccurrences { deletedDemoSeries.append(current) }
+            else { deletedDemoOccurrences.insert(current.id) }
+        } else {
+            try store.remove(editableEvent(snapshot), span: scope == .futureOccurrences ? .futureEvents : .thisEvent, commit: true)
+        }
+        revision = UUID()
+    }
+
+    private func isDemoDeleted(_ event: CalendarEventSnapshot) -> Bool {
+        deletedDemoOccurrences.contains(event.id) || deletedDemoSeries.contains {
+            $0.calendarID == event.calendarID && $0.itemID == event.itemID && event.start >= $0.start
+        }
     }
 }
 
@@ -265,7 +332,7 @@ private actor CalendarQueryWorker {
             return CalendarEventSnapshot(eventID: event.eventIdentifier ?? event.calendarItemIdentifier, itemID: event.calendarItemIdentifier,
                 calendarID: event.calendar.calendarIdentifier, title: event.title ?? "未命名日程", start: start, end: end,
                 allDay: event.isAllDay, location: event.location ?? "", notes: event.notes ?? "", timeZone: event.timeZone?.identifier ?? TimeZone.current.identifier,
-                blocksTime: event.availability != .free && !declined)
+                blocksTime: event.availability != .free && !declined, isRecurring: event.hasRecurrenceRules || event.isDetached)
         }
         try Task.checkCancellation()
         return result

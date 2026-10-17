@@ -4,7 +4,7 @@ enum WorkspaceSection: Int, CaseIterable, Identifiable {
     case home = 0, calendar = 3, countdowns = 4, history = 1, settings = 2
     var id: Int { rawValue }
     var title: String {
-        switch self { case .home: "导入"; case .calendar: "日历"; case .countdowns: "倒数日"; case .history: "记录"; case .settings: "设置" }
+        switch self { case .home: "计划"; case .calendar: "日历"; case .countdowns: "倒数日"; case .history: "记录"; case .settings: "设置" }
     }
     var symbol: String {
         switch self { case .home: "square.and.pencil"; case .calendar: "calendar"; case .countdowns: "heart.text.clipboard"; case .history: "book.closed"; case .settings: "slider.horizontal.3" }

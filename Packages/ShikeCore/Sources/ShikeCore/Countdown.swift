@@ -106,6 +106,8 @@ public struct Countdown: Codable, Identifiable, Equatable, Sendable {
     public var targetTime: CountdownTime?
     public var includesStartDay: Bool?
     public var cardColor: CountdownCardColor?
+    /// Identifies a one-time conversion, without linking subsequent edits to the source.
+    public var sourceIdentifier: String?
     public init(id: UUID = UUID(), title: String = "", date: CivilDate = CivilDate(.now)) {
         self.id = id; self.title = title; self.anchorDate = date
     }

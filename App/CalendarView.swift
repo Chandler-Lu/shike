@@ -114,7 +114,7 @@ struct CalendarScreen: View {
                 }.tint(Notebook.accent)
             }
             .sheet(item: $selectedCountdown) { entry in CountdownDetail(store: countdowns, reminders: reminders, id: entry.id) }
-            .sheet(item: $selected) { event in CalendarEventDetail(event: event, calendars: calendars, zone: zone).workspaceSheet() }
+            .sheet(item: $selected) { event in CalendarEventDetail(event: event, calendars: calendars, countdowns: countdowns, zone: zone).workspaceSheet() }
             .sheet(isPresented: Binding(get: { dayList != nil }, set: { if !$0 { dayList = nil } })) {
                 NavigationStack {
                     List {
@@ -127,7 +127,7 @@ struct CalendarScreen: View {
                     }.navigationTitle((dayList ?? date).formatted(.dateTime.month().day()))
                         .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dayList = nil } } }
                         .sheet(item: $listCountdown) { entry in CountdownDetail(store: countdowns, reminders: reminders, id: entry.id) }
-                        .sheet(item: $listSelection) { event in CalendarEventDetail(event: event, calendars: calendars, zone: zone) }
+                        .sheet(item: $listSelection) { event in CalendarEventDetail(event: event, calendars: calendars, countdowns: countdowns, zone: zone) }
                 }
             }
     }
@@ -588,13 +588,29 @@ struct TimelinePlacement: Identifiable {
 }
 
 private struct CalendarEventDetail: View {
+    private struct DeletionRequest {
+        let event: CalendarEventSnapshot
+        var afterConversion = false
+        var title: String { afterConversion ? "已加入倒数日，是否删除当前日程？" : "删除日程？" }
+        var message: String {
+            if afterConversion { return "仅删除当前这一次日程，不影响重复日程的其他日期。" }
+            return event.isRecurring ? "“\(event.title)”是重复日程。请选择删除范围，此前的日程会保留。" : "确定删除“\(event.title)”？"
+        }
+    }
     let event: CalendarEventSnapshot
     @ObservedObject var calendars: CalendarService
+    @ObservedObject var countdowns: CountdownStore
     let zone: TimeZone
     @Environment(\.dismiss) private var dismiss
     @State private var editing: EKEvent?
     @State private var editorChangedEvent = false
     @State private var error: String?
+    @State private var deletionRequest: DeletionRequest?
+    @State private var asksToDelete = false
+    @State private var information: String?
+    @State private var savingCountdown = false
+    @State private var closingAfterDelete = false
+    private var canDelete: Bool { calendars.authorized && calendars.calendars.contains { $0.id == event.calendarID } }
     var body: some View {
         NavigationStack {
             ZStack { PaperBackground(); ScrollView {
@@ -617,10 +633,37 @@ private struct CalendarEventDetail: View {
                                 .buttonStyle(InkButtonStyle()).accessibilityIdentifier("editCalendarEvent")
                         }
                     }
+                    Button("加入倒数日") { addCountdown() }
+                        .buttonStyle(InkButtonStyle(prominent: false)).disabled(savingCountdown)
+                        .accessibilityIdentifier("calendarEventToCountdown")
+                    if let information { NoteMessage(text: information).accessibilityIdentifier("calendarConversionStatus") }
                     if let error { NoteMessage(text: error, isError: true) }
-                }.padding(22)
+                    if canDelete {
+                        Button(role: .destructive) { requestDeletion() } label: {
+                            Label("删除日程", systemImage: "trash")
+                                .font(.body.weight(.semibold)).foregroundStyle(Notebook.red)
+                                .padding(.vertical, 8).frame(maxWidth: .infinity, minHeight: 48)
+                                .background(Notebook.paper, in: RoundedRectangle(cornerRadius: 13))
+                                .overlay(PencilBorder().stroke(Notebook.red.opacity(0.55), lineWidth: 1.3))
+                        }.buttonStyle(.plain).accessibilityIdentifier("deleteCalendarEvent")
+                    }
+                }.padding(22).disabled(closingAfterDelete)
             } }.navigationTitle("日程详情").navigationBarTitleDisplayMode(.inline)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
+                .alert(deletionRequest?.title ?? "删除日程？", isPresented: $asksToDelete, presenting: deletionRequest) { request in
+                    if request.afterConversion {
+                        Button("删除日程", role: .destructive) { deleteEvent(request) }
+                        Button("保留日程", role: .cancel) { information = "倒数日已保存，原日程已保留。" }
+                    } else {
+                        if request.event.isRecurring {
+                            Button("仅删除当前这一次", role: .destructive) { deleteEvent(request) }
+                            Button("删除当前及之后", role: .destructive) { deleteEvent(request, scope: .futureOccurrences) }
+                        } else {
+                            Button("删除日程", role: .destructive) { deleteEvent(request) }
+                        }
+                        Button("取消", role: .cancel) {}
+                    }
+                } message: { request in Text(request.message) }
                 .sheet(isPresented: Binding(get: { editing != nil }, set: { if !$0 { editing = nil } }), onDismiss: {
                     // Dismiss the detail only after the native editor finishes
                     // closing. Closing both sheets in its delegate callback leaves
@@ -636,6 +679,44 @@ private struct CalendarEventDetail: View {
                     } }
                 }
         }.tint(Notebook.accent)
+    }
+
+    private func addCountdown() {
+        guard !savingCountdown else { return }
+        savingCountdown = true; error = nil
+        defer { savingCountdown = false }
+        do {
+            let current = try calendars.currentSnapshot(event)
+            let entry = try CountdownConversion.from(current, fallbackZone: zone)
+            try countdowns.insertConverted([entry])
+            information = "已加入倒数日。"
+            if calendars.calendars.contains(where: { $0.id == current.calendarID }) {
+                deletionRequest = DeletionRequest(event: current, afterConversion: true); asksToDelete = true
+            } else { information = "已加入倒数日。原日程来自只读日历，已保留。" }
+        } catch { self.error = error.localizedDescription }
+    }
+    private func requestDeletion() {
+        guard !closingAfterDelete else { return }
+        error = nil
+        do {
+            deletionRequest = DeletionRequest(event: try calendars.currentSnapshot(event))
+            asksToDelete = true
+        } catch { self.error = error.localizedDescription }
+    }
+
+    private func deleteEvent(_ request: DeletionRequest, scope: CalendarDeletionScope = .occurrence) {
+        guard !closingAfterDelete else { return }
+        do {
+            try calendars.deleteOccurrence(request.event, scope: scope)
+            closingAfterDelete = true
+            // Let the confirmation alert finish closing before closing its host sheet.
+            Task { @MainActor in
+                try? await Task.sleep(for: .milliseconds(350))
+                dismiss()
+            }
+        } catch {
+            self.error = (request.afterConversion ? "倒数日已保留，原日程未删除：" : "未能删除日程：") + error.localizedDescription
+        }
     }
 }
 

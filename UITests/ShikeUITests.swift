@@ -611,7 +611,7 @@ final class ShikeUITests: XCTestCase {
         let policy = app.buttons["privacyPolicy"]; revealForReview(policy, app: app); policy.tap()
         XCTAssertTrue(app.navigationBars["隐私政策"].waitForExistence(timeout: 5))
         capture("privacy-policy", app: app)
-        app.tabBars.buttons["导入"].tap()
+        app.tabBars.buttons["计划"].tap()
         revealForReview(parse, app: app); parse.tap()
         XCTAssertTrue(allow.waitForExistence(timeout: 5))
     }
@@ -827,7 +827,7 @@ final class ShikeUITests: XCTestCase {
             XCTAssertFalse(app.segmentedControls["apiFormat"].exists)
         }
         saveProfile(name: "Claude Work", model: "claude-fixture")
-        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.tabBars.buttons["计划"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let homeProfile = app.buttons["homeAPIProfile"]
         XCTAssertTrue(homeProfile.waitForExistence(timeout: 5))
         XCTAssertEqual(homeProfile.value as? String, "Claude Work")
@@ -863,7 +863,7 @@ final class ShikeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["Claude Work 副本"].exists)
         app.buttons["Claude Work"].tap()
         XCTAssertEqual(app.textFields["modelName"].value as? String, "claude-fixture")
-        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.tabBars.buttons["计划"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertTrue(homeProfile.waitForExistence(timeout: 5))
         XCTAssertEqual(homeProfile.value as? String, "Claude Work")
         reveal(homeProfile)
@@ -872,7 +872,7 @@ final class ShikeUITests: XCTestCase {
         capture("home-api", app: app)
         app.tabBars.buttons["设置"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertEqual(app.textFields["apiProfileName"].value as? String, "Gemini Backup")
-        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.tabBars.buttons["计划"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         XCTAssertEqual(homeProfile.value as? String, "Gemini Backup")
 
         app.tabBars.buttons["设置"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
@@ -880,7 +880,7 @@ final class ShikeUITests: XCTestCase {
         name.coordinate(withNormalizedOffset: CGVector(dx: 0.98, dy: 0.5)).tap()
         name.typeText(" — Long personal calendar connection")
         if app.buttons["收起键盘"].exists { app.buttons["收起键盘"].tap() }
-        app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
+        app.tabBars.buttons["计划"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap()
         let fullName = "Gemini Backup — Long personal calendar connection"
         XCTAssertEqual(homeProfile.value as? String, fullName)
         reveal(homeProfile)
@@ -969,7 +969,7 @@ final class ShikeUITests: XCTestCase {
         category.tap()
         app.buttons["工作（测试日历）"].tap()
         capture("calendar-routing", app: app)
-        app.tabBars.buttons["导入"].tap()
+        app.tabBars.buttons["计划"].tap()
         app.buttons["parseEvents"].tap()
         let work = app.buttons["editEvent-产品设计评审"]
         XCTAssertTrue(work.waitForExistence(timeout: 8))

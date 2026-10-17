@@ -19,6 +19,7 @@ struct ImportFlowView: View {
     @State private var editing: EventDraft?
     @State private var batchCalendar = ""
     @FocusState private var textFocused: Bool
+    @ScaledMetric(relativeTo: .body) private var saveButtonHeight: CGFloat = 58
 
     var body: some View {
         let wide = WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) && !isExtension && !isPlanningContent
@@ -174,15 +175,42 @@ struct ImportFlowView: View {
                     draftRow($draft)
                 }
 
+                let selectedCount = controller.session.drafts.filter(\.selected).count
                 let pendingCount = controller.session.drafts.filter { $0.selected && !$0.isSaved }.count
-                if pendingCount > 0 {
+                let pendingCountdownCount = controller.pendingCountdownDrafts.count
+                if (isExtension ? pendingCount : selectedCount) > 0 {
+                    if !isExtension {
+                        GeometryReader { geometry in
+                            HStack(spacing: 12) {
+                                Button { textFocused = false; controller.addSelectedCountdowns() } label: {
+                                    ViewThatFits(in: .horizontal) {
+                                        Text("加入倒数日").fixedSize()
+                                        Text("加入\n倒数日").multilineTextAlignment(.center).lineLimit(2).minimumScaleFactor(0.3)
+                                    }
+                                        .padding(.horizontal, 4).frame(maxHeight: .infinity)
+                                }.buttonStyle(InkButtonStyle(prominent: false))
+                                    .frame(width: max(0, geometry.size.width - 12) / 4)
+                                    .disabled(controller.isBusy || pendingCountdownCount == 0).accessibilityIdentifier(isPlanningContent ? "planning-saveCountdowns" : "saveCountdowns")
+                                    .accessibilityLabel("加入倒数日")
+                                    .accessibilityValue("已选择 \(pendingCountdownCount) 个日程")
+                                Button { textFocused = false; controller.saveSelected() } label: {
+                                    Label("加入日历", systemImage: "checkmark").frame(maxHeight: .infinity)
+                                }.buttonStyle(InkButtonStyle())
+                                    .disabled(controller.isBusy || pendingCount == 0 || !calendars.authorized || calendars.calendars.isEmpty)
+                                    .accessibilityIdentifier(isPlanningContent ? "planning-saveEvents" : "saveEvents")
+                                    .accessibilityValue("已选择 \(pendingCount) 个日程")
+                            }
+                        }.frame(height: saveButtonHeight)
+                    } else {
                     Button { textFocused = false; controller.saveSelected() } label: {
                         Label("将 \(pendingCount) 个日程加入日历", systemImage: "checkmark")
                     }.buttonStyle(InkButtonStyle()).disabled(controller.isBusy || !calendars.authorized || calendars.calendars.isEmpty)
                         .accessibilityIdentifier(isExtension ? "share-saveEvents" : (isPlanningContent ? "planning-saveEvents" : "saveEvents"))
-                } else if controller.session.savedCount == controller.session.drafts.count {
-                    HStack { Image(systemName: "checkmark.seal"); Text("都放进日历了，记得留一点时间给自己。") }
+                    }
+                } else if let message = controller.destinationCompletionMessage {
+                    HStack { Image(systemName: "checkmark.seal"); Text(message) }
                         .font(Notebook.handwriting(18)).foregroundStyle(Notebook.ink).padding(.vertical, 8)
+                        .accessibilityIdentifier("destinationCompletion")
                 }
             }
             else if wide {
@@ -203,6 +231,9 @@ struct ImportFlowView: View {
         }
         .sheet(isPresented: Binding(get: { controller.review != nil && (isPlanningContent || !controller.showsPlanning) }, set: { if !$0 { controller.cancelReview() } })) {
             GuidedReviewView(controller: controller).presentationDetents([.large]).workspaceSheet()
+        }
+        .sheet(isPresented: Binding(get: { controller.countdownReview != nil && (isPlanningContent || !controller.showsPlanning) }, set: { if !$0 { controller.cancelCountdownReview() } })) {
+            CountdownConversionReview(controller: controller).workspaceSheet()
         }
         .sheet(item: Binding(get: { (isPlanningContent || !controller.showsPlanning) ? controller.consentRequest : nil }, set: { if $0 == nil && controller.consentRequest != nil { controller.declineExtraction() } })) { scope in
             ExtractionConsentView(scope: scope, allow: controller.allowExtraction, cancel: controller.declineExtraction)
@@ -244,7 +275,7 @@ struct ImportFlowView: View {
         return PaperCard(tint: draft.isSaved ? Notebook.green.opacity(0.12) : Notebook.paper) {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .top, spacing: 9) {
-                    if draft.isSaved {
+                    if draft.isSaved && isExtension {
                         Image(systemName: "checkmark.circle.fill").foregroundStyle(Notebook.accent).padding(.top, 5)
                     } else {
                         Button { binding.wrappedValue.selected.toggle() } label: {
@@ -291,6 +322,72 @@ struct ImportFlowView: View {
                 if let error = draft.saveError { Text(error).font(.caption).foregroundStyle(Notebook.red) }
             }
         }.disabled(controller.isBusy)
+    }
+}
+
+private struct CountdownConversionReview: View {
+    @ObservedObject var controller: ImportController
+    @State private var error: String?
+    var body: some View {
+        if let draft = controller.countdownReviewDraft {
+            CountdownConversionDateEditor(draft: draft, confirm: controller.confirmCountdownReview, cancel: controller.cancelCountdownReview)
+                .id(draft.id)
+        } else {
+            NavigationStack {
+                ZStack { PaperBackground(); VStack(spacing: 20) {
+                    Text("日子已核对，准备加入倒数日。")
+                    if let error = error ?? controller.errorMessage { NoteMessage(text: error, isError: true) }
+                    Button("加入倒数日") {
+                        do { try controller.finishCountdownReview() } catch { self.error = error.localizedDescription }
+                    }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("retrySaveCountdowns")
+                }.padding(22) }.navigationTitle("加入倒数日")
+                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消", action: controller.cancelCountdownReview) } }
+            }
+        }
+    }
+}
+
+private struct CountdownConversionDateEditor: View {
+    @State var draft: EventDraft
+    let confirm: (EventDraft) throws -> Void
+    let cancel: () -> Void
+    @State private var error: String?
+    @FocusState private var focused: Bool
+    var body: some View {
+        NavigationStack {
+            ZStack { PaperBackground(); ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    Text("核对要记住的日子").font(Notebook.handwriting(26))
+                    TextField("日子名称", text: $draft.title, axis: .vertical).focused($focused)
+                        .accessibilityIdentifier("conversionTitle")
+                    DatePicker("开始日期", selection: Binding(get: { draft.start ?? .now }, set: { draft.start = $0 }), displayedComponents: .date)
+                        .environment(\.timeZone, draft.timeZone).accessibilityIdentifier("conversionDate")
+                    if draft.start == nil {
+                        Text("请选择日期，或确认使用今天。当前尚未填写日期。").font(.caption).foregroundStyle(Notebook.secondaryInk)
+                        Button("使用今天") {
+                            var calendar = Calendar(identifier: .gregorian); calendar.timeZone = draft.timeZone
+                            draft.start = calendar.startOfDay(for: .now)
+                        }
+                            .accessibilityIdentifier("conversionUseToday")
+                    }
+                    Text("按开始日期计算天数，原日程时间和地点会保留在备注中。")
+                        .font(.subheadline).foregroundStyle(Notebook.secondaryInk)
+                    ForEach(Array(draft.reviewNotes.enumerated()), id: \.offset) { _, note in
+                        Text(note).font(.caption).foregroundStyle(Notebook.secondaryInk)
+                    }
+                    TextField("备注", text: $draft.notes, axis: .vertical).lineLimit(3...8).focused($focused)
+                    if let error { NoteMessage(text: error, isError: true) }
+                    Button("确认日期并继续") {
+                        focused = false
+                        do { try confirm(draft) } catch { self.error = error.localizedDescription }
+                    }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("confirmConversionDate")
+                }.padding(22)
+            } }.navigationTitle("加入倒数日").navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) { Button("取消", action: cancel) }
+                    ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { focused = false } }
+                }
+        }.foregroundStyle(Notebook.ink).tint(Notebook.accent)
     }
 }
 

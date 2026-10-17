@@ -1,6 +1,144 @@
 import XCTest
 
 final class PlatformWorkspaceUITests: XCTestCase {
+    func testCompletionFooterNamesCountdownAndBothDestinations() {
+        let app = launch()
+        let parse = app.buttons["parseEvents"]; reveal(parse, app: app); parse.activateControl()
+        let convert = app.buttons["saveCountdowns"]
+        XCTAssertTrue(convert.waitForExistence(timeout: 10)); reveal(convert, app: app); convert.activateControl()
+        let confirmDate = app.buttons["confirmConversionDate"]
+        XCTAssertTrue(confirmDate.waitForExistence(timeout: 5)); reveal(confirmDate, app: app); confirmDate.activateControl()
+        XCTAssertTrue(confirmDate.waitForNonExistence(timeout: 5))
+        let countdownDone = app.staticTexts["全部日程已加入倒数日。"]
+        XCTAssertTrue(countdownDone.waitForExistence(timeout: 5)); reveal(countdownDone, app: app)
+        XCTAssertFalse(app.staticTexts["全部日程已加入日历。"].exists)
+        capture("completion-countdowns", app)
+        for title in ["产品设计评审", "和小林喝咖啡"] {
+            let select = app.buttons["选择 \(title)"]
+            for _ in 0..<6 where !select.isHittable { app.swipeDown() }
+            XCTAssertTrue(select.isHittable); select.activateControl()
+        }
+        let calendar = app.buttons["saveEvents"]; reveal(calendar, app: app); calendar.activateControl()
+        let review = app.buttons["confirmReview"]
+        XCTAssertTrue(review.waitForExistence(timeout: 5)); reveal(review, app: app); review.activateControl()
+        XCTAssertTrue(review.waitForNonExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["全部日程已加入日历和倒数日。"].waitForExistence(timeout: 8))
+    }
+
+    func testCalendarFirstDraftCanBeSelectedAgainForCountdown() {
+        let app = launch()
+        let parse = app.buttons["parseEvents"]; reveal(parse, app: app); parse.activateControl()
+        let ignore = app.buttons["取消选择 和小林喝咖啡"]
+        XCTAssertTrue(ignore.waitForExistence(timeout: 10)); reveal(ignore, app: app); ignore.activateControl()
+        let calendar = app.buttons["saveEvents"]
+        reveal(calendar, app: app); calendar.activateControl()
+        XCTAssertTrue(app.staticTexts["已将 1 个日程加入日历。"].waitForExistence(timeout: 8))
+        let select = app.buttons["选择 产品设计评审"]
+        XCTAssertTrue(select.waitForExistence(timeout: 5)); reveal(select, app: app); select.activateControl()
+        let convert = app.buttons["saveCountdowns"]
+        reveal(convert, app: app)
+        XCTAssertTrue(convert.isEnabled); XCTAssertFalse(calendar.isEnabled)
+        XCTAssertEqual(convert.value as? String, "已选择 1 个日程")
+        capture("calendar-first-countdown-actions", app)
+        convert.activateControl()
+        XCTAssertTrue(convert.waitForNonExistence(timeout: 5))
+        XCTAssertTrue(select.exists, "加入倒数日后应取消勾选，但仍可再次选择")
+        reveal(select, app: app); select.activateControl()
+        reveal(convert, app: app)
+        XCTAssertFalse(convert.isEnabled); XCTAssertFalse(calendar.isEnabled, "两个位置都已加入时两个按钮均不可重复使用")
+        section(4, "倒数日", app: app)
+        XCTAssertTrue(app.staticTexts["4 个日子"].waitForExistence(timeout: 5))
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "countdown-", "产品设计评审")).firstMatch.exists)
+    }
+
+    func testDraftConversionKeepsSelectionIndependentAndUsesQuarterWidthAction() {
+        let app = launch()
+        XCTAssertTrue(app.buttons["section-0"].exists || app.tabBars.buttons["计划"].exists || app.buttons["计划"].firstMatch.exists)
+        let parse = app.buttons["parseEvents"]; reveal(parse, app: app); parse.activateControl()
+        let ignore = app.buttons["取消选择 和小林喝咖啡"]
+        XCTAssertTrue(ignore.waitForExistence(timeout: 10)); reveal(ignore, app: app); ignore.activateControl()
+        let convert = app.buttons["saveCountdowns"], calendar = app.buttons["saveEvents"]
+        reveal(convert, app: app)
+        XCTAssertEqual(calendar.frame.width / convert.frame.width, 3, accuracy: 0.08)
+        XCTAssertGreaterThanOrEqual(convert.frame.height, 44)
+        capture("conversion-actions", app)
+        convert.activateControl()
+        XCTAssertTrue(convert.waitForNonExistence(timeout: 5))
+        let select = app.buttons["选择 产品设计评审"]
+        reveal(select, app: app); select.activateControl()
+        reveal(convert, app: app)
+        XCTAssertFalse(convert.isEnabled); XCTAssertTrue(calendar.isEnabled)
+        let second = app.buttons["选择 和小林喝咖啡"]
+        reveal(second, app: app); second.activateControl()
+        reveal(convert, app: app)
+        XCTAssertTrue(convert.isEnabled)
+        XCTAssertEqual(convert.value as? String, "已选择 1 个日程", "混合选择只处理未加入的项目")
+        convert.activateControl()
+        let confirm = app.buttons["confirmConversionDate"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5)); reveal(confirm, app: app); confirm.activateControl()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5))
+        reveal(convert, app: app)
+        XCTAssertFalse(convert.isEnabled); XCTAssertTrue(calendar.isEnabled)
+        XCTAssertTrue(app.buttons["取消选择 产品设计评审"].exists, "跳过的项目保留勾选")
+        XCTAssertTrue(second.exists, "新加入的项目取消勾选")
+        section(4, "倒数日", app: app)
+        XCTAssertTrue(app.staticTexts["5 个日子"].waitForExistence(timeout: 5), "已加入的项目不能重复创建")
+        XCTAssertTrue(app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@ AND label CONTAINS %@", "countdown-", "产品设计评审")).firstMatch.exists)
+        capture("conversion-countdown", app)
+    }
+
+    func testPlanningProposalCanBeAddedToCountdowns() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-seed-example", "-planning-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let plan = app.buttons["planEvents"]; XCTAssertTrue(plan.waitForExistence(timeout: 10)); reveal(plan, app: app); plan.activateControl()
+        let start = app.buttons["startPlanning"]; XCTAssertTrue(start.waitForExistence(timeout: 5)); reveal(start, app: app); start.activateControl()
+        let option = app.buttons["planningOption-每次 30 分钟，晚上安排"]
+        XCTAssertTrue(option.waitForExistence(timeout: 10)); reveal(option, app: app); option.activateControl()
+        let convert = app.buttons["planning-saveCountdowns"]
+        XCTAssertTrue(convert.waitForExistence(timeout: 10)); reveal(convert, app: app); convert.activateControl()
+        XCTAssertTrue(convert.waitForNonExistence(timeout: 5))
+        app.buttons["closePlanning"].activateControl()
+        section(4, "倒数日", app: app)
+        XCTAssertTrue(app.staticTexts["1 个日子"].waitForExistence(timeout: 5))
+    }
+
+    func testCountdownConversionReviewConfirmsOnlyDate() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-seed-example", "-review-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        let parse = app.buttons["parseEvents"]; XCTAssertTrue(parse.waitForExistence(timeout: 10)); reveal(parse, app: app); parse.activateControl()
+        let ignore = app.buttons["取消选择 "]
+        XCTAssertTrue(ignore.waitForExistence(timeout: 10)); reveal(ignore, app: app); ignore.activateControl()
+        let convert = app.buttons["saveCountdowns"]; reveal(convert, app: app); convert.activateControl()
+        let confirm = app.buttons["confirmConversionDate"]
+        XCTAssertTrue(confirm.waitForExistence(timeout: 5)); reveal(confirm, app: app)
+        capture("conversion-date-review", app); confirm.activateControl()
+        XCTAssertTrue(confirm.waitForNonExistence(timeout: 5))
+        section(4, "倒数日", app: app)
+        XCTAssertTrue(app.staticTexts["1 个日子"].waitForExistence(timeout: 5))
+    }
+
+    func testConversionActionsFitWithAccessibilityTextSize() {
+        continueAfterFailure = false
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-seed-example", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN",
+                               "-UIPreferredContentSizeCategoryName", "UICTContentSizeCategoryAccessibilityXXXL"]
+        app.launch()
+        let parse = app.buttons["parseEvents"]
+        XCTAssertTrue(parse.waitForExistence(timeout: 10)); reveal(parse, app: app); parse.activateControl()
+        let convert = app.buttons["saveCountdowns"], calendar = app.buttons["saveEvents"]
+        XCTAssertTrue(convert.waitForExistence(timeout: 10)); reveal(convert, app: app)
+        XCTAssertEqual(calendar.frame.width / convert.frame.width, 3, accuracy: 0.08)
+        XCTAssertGreaterThanOrEqual(convert.frame.height, 44)
+        XCTAssertLessThanOrEqual(convert.frame.maxX, calendar.frame.minX)
+        XCTAssertGreaterThanOrEqual(convert.frame.minX, app.frame.minX)
+        XCTAssertLessThanOrEqual(calendar.frame.maxX, app.frame.maxX)
+        capture("conversion-accessibility-actions", app)
+    }
+
     /// Reproducible, public examples for promotion; never reads personal data or calls an API.
     func testPromotionWorkspace() {
         continueAfterFailure = false
@@ -89,7 +227,7 @@ final class PlatformWorkspaceUITests: XCTestCase {
         defer { XCUIDevice.shared.orientation = .portrait }
         let app = launch()
         if #available(iOS 27.1, *) {
-            XCTAssertTrue(app.tabBars.buttons["导入"].isHittable || app.buttons["导入"].firstMatch.isHittable)
+            XCTAssertTrue(app.tabBars.buttons["计划"].isHittable || app.buttons["计划"].firstMatch.isHittable)
         } else {
             if !app.buttons["section-0"].isHittable {
                 // Older iPadOS may restore a narrow window with our legacy navigation.

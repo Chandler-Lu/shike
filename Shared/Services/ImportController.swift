@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import SwiftUI
 import ShikeCore
 
@@ -15,9 +16,10 @@ import ShikeCore
     lazy var backups = DataBackupService(environment: self)
     #endif
     init(preferences: Preferences? = nil, calendars: CalendarService? = nil, store: SessionStore? = nil,
-         consent: ExtractionConsentStore? = nil, llmClient: LLMClient = LLMClient(), modelJobs: ModelJobCenter? = nil) {
+         consent: ExtractionConsentStore? = nil, llmClient: LLMClient = LLMClient(), modelJobs: ModelJobCenter? = nil,
+         countdowns: CountdownStore? = nil) {
         self.preferences = preferences ?? Preferences()
-        self.countdowns = CountdownStore(inMemory: AppIdentity.isUITesting)
+        self.countdowns = countdowns ?? CountdownStore(inMemory: AppIdentity.isUITesting)
         self.calendars = calendars ?? CalendarService()
         self.consent = consent ?? ExtractionConsentStore()
         self.llmClient = llmClient
@@ -46,6 +48,7 @@ struct DraftReview {
     @Published var errorMessage: String?
     @Published var information: String?
     @Published private(set) var review: DraftReview?
+    @Published private(set) var countdownReview: DraftReview?
     @Published private(set) var consentRequest: ExtractionConsent?
     let environment: AppEnvironment
     @Published var showsPlanning = false
@@ -55,10 +58,14 @@ struct DraftReview {
     private var operation: Task<Void, Never>?
     private var modelRequestID = UUID()
     private var persistence: Task<Void, Never>?
+    private var countdownObservation: AnyCancellable?
     var isBusy: Bool { busyMessage != nil }
 
     init(environment: AppEnvironment, session: ImportSession = ImportSession()) {
         self.environment = environment; self.session = session
+        countdownObservation = environment.countdowns.$revision.dropFirst().sink { [weak self] _ in
+            self?.objectWillChange.send()
+        }
     }
 
     func schedulePersistence() {
@@ -80,14 +87,14 @@ struct DraftReview {
     }
 
     func refreshReferenceDate(now: Date = .now) {
-        guard !isBusy, review == nil, consentRequest == nil, session.savedCount == 0 else { return }
+        guard !isBusy, review == nil, countdownReview == nil, consentRequest == nil, session.savedCount == 0 else { return }
         session.referenceDate = now
         persistReportingError()
         information = nil
     }
 
     func startNew() {
-        guard !isBusy, review == nil, consentRequest == nil else { return }
+        guard !isBusy, review == nil, countdownReview == nil, consentRequest == nil else { return }
         do { try persist(); session = ImportSession(); information = nil; errorMessage = nil }
         catch { errorMessage = error.localizedDescription }
     }
@@ -95,7 +102,7 @@ struct DraftReview {
     func discardDeletedSession(_ ids: Set<UUID>) {
         guard ids.contains(session.id) else { return }
         operation?.cancel(); persistence?.cancel()
-        busyMessage = nil; review = nil; consentRequest = nil; showsPlanning = false
+        busyMessage = nil; review = nil; countdownReview = nil; consentRequest = nil; showsPlanning = false
         conflictAcknowledgements.removeAll(); conflictSnapshot.removeAll()
         session = ImportSession(); information = nil; errorMessage = nil
     }
@@ -175,7 +182,7 @@ struct DraftReview {
 
     func parse() {
         planningIntent = false
-        guard !isBusy, review == nil, consentRequest == nil else { return }
+        guard !isBusy, review == nil, countdownReview == nil, consentRequest == nil else { return }
         guard !session.drafts.contains(where: \.isSaved) else {
             errorMessage = "已有日程保存到日历，请新建一次导入再解析。"; return
         }
@@ -335,7 +342,8 @@ struct DraftReview {
     }
 
     func saveSelected() {
-        guard !isBusy, review == nil else { return }
+        guard !isBusy, review == nil, countdownReview == nil else { return }
+        guard session.drafts.contains(where: { $0.selected && !$0.isSaved }) else { return }
         guard session.planning != nil else { beginSaveSelected(); return }
         busyMessage = "正在检查时间冲突…"
         operation = Task {
@@ -346,6 +354,87 @@ struct DraftReview {
                 beginSaveSelected()
             } catch { busyMessage = nil; errorMessage = error.localizedDescription }
         }
+    }
+
+    private var countdownSourceIdentifiers: Set<String> {
+        Set(environment.countdowns.entries.compactMap(\.sourceIdentifier))
+    }
+
+    var destinationCompletionMessage: String? {
+        let drafts = session.drafts, sources = countdownSourceIdentifiers
+        guard !drafts.isEmpty,
+              drafts.allSatisfy({ $0.isSaved || sources.contains(CountdownConversion.sourceIdentifier(for: $0)) }) else { return nil }
+        let calendarCount = drafts.filter(\.isSaved).count
+        let countdownCount = drafts.filter { sources.contains(CountdownConversion.sourceIdentifier(for: $0)) }.count
+        if calendarCount == drafts.count && countdownCount == drafts.count { return "全部日程已加入日历和倒数日。" }
+        if calendarCount == drafts.count && countdownCount == 0 { return "全部日程已加入日历。" }
+        if countdownCount == drafts.count && calendarCount == 0 { return "全部日程已加入倒数日。" }
+        return "已加入日历 \(calendarCount) 个，倒数日 \(countdownCount) 个。"
+    }
+
+    var pendingCountdownDrafts: [EventDraft] {
+        let sources = countdownSourceIdentifiers
+        return session.drafts.filter { $0.selected && !sources.contains(CountdownConversion.sourceIdentifier(for: $0)) }
+    }
+
+    func addSelectedCountdowns() {
+        guard !isBusy, review == nil, countdownReview == nil else { return }
+        let selected = pendingCountdownDrafts
+        guard !selected.isEmpty else { return }
+        errorMessage = nil; information = nil
+        // Saved calendar events have already been confirmed. Only unsaved drafts need review.
+        let pending = selected.filter { !$0.isSaved && ($0.needsReview || (try? CountdownConversion.from($0)) == nil) }.map(\.id)
+        if !pending.isEmpty {
+            countdownReview = DraftReview(sessionID: session.id, selectedIDs: selected.map(\.id), pendingIDs: pending)
+        } else {
+            do { try saveCountdowns(selected.map(\.id)) } catch { errorMessage = error.localizedDescription }
+        }
+    }
+
+    var countdownReviewDraft: EventDraft? {
+        guard let id = countdownReview?.pendingIDs.first else { return nil }
+        return session.drafts.first { $0.id == id && $0.selected && !$0.isSaved }
+    }
+    func cancelCountdownReview() { countdownReview = nil }
+    func confirmCountdownReview(_ edited: EventDraft) throws {
+        guard !isBusy, var progress = countdownReview, progress.sessionID == session.id,
+              countdownReviewDraft?.id == edited.id else { throw ShikeError.message("核对内容已变化，请重新打开。") }
+        _ = try CountdownConversion.from(edited)
+        // Confirming a countdown date does not approve the calendar's end time or conflict suggestions.
+        try persistReviewEdit(edited)
+        progress.pendingIDs.removeFirst(); progress.completedCount += 1
+        countdownReview = progress
+        if progress.pendingIDs.isEmpty { try finishCountdownReview() }
+    }
+    func finishCountdownReview() throws {
+        guard let progress = countdownReview, progress.sessionID == session.id,
+              progress.pendingIDs.isEmpty, !isBusy else { return }
+        do { try saveCountdowns(progress.selectedIDs) }
+        catch { errorMessage = error.localizedDescription; throw error }
+        countdownReview = nil
+    }
+    private func saveCountdowns(_ ids: [UUID]) throws {
+        let selected = session.drafts.filter { ids.contains($0.id) && $0.selected }
+        guard selected.count == ids.count else { throw ShikeError.message("所选日程已发生变化，请重新选择。") }
+        // Recheck after review: another window or cloud sync may have added some days.
+        let pending = pendingCountdownDrafts.filter { ids.contains($0.id) }
+        guard !pending.isEmpty else { return }
+        let entries = try pending.map { try CountdownConversion.from($0) }
+        busyMessage = "正在加入倒数日…"
+        defer { busyMessage = nil }
+        try persist()
+        try environment.countdowns.insertConverted(entries)
+        var updated = session
+        let addedIDs = Set(pending.map(\.id))
+        for index in updated.drafts.indices where addedIDs.contains(updated.drafts[index].id) { updated.drafts[index].selected = false }
+        do {
+            guard let store = environment.store else { throw ShikeError.message("记录存储不可用。") }
+            try store.save(updated)
+        } catch {
+            throw ShikeError.message("倒数日已保存，但勾选状态保存失败。已加入的项目不会重复添加。\(error.localizedDescription)")
+        }
+        session = updated
+        information = "已将 \(entries.count) 个日程加入倒数日。"
     }
 
     private func beginSaveSelected() {
@@ -471,6 +560,7 @@ struct DraftReview {
                 }
                 do {
                     session.drafts[index] = try environment.calendars.save(session.drafts[index])
+                    session.drafts[index].selected = false
                     successes += 1
                 } catch {
                     session.drafts[index].saveAttemptInProgress = false
@@ -519,7 +609,7 @@ struct DraftReview {
 
 extension ImportController {
     func restartPlanning() {
-        guard !isBusy, review == nil, consentRequest == nil, let previous = session.planning else { return }
+        guard !isBusy, review == nil, countdownReview == nil, consentRequest == nil, let previous = session.planning else { return }
         guard !previous.goal.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
         do {
             // Keep the old conversation in history; restart from the same goal and range.
@@ -540,7 +630,7 @@ extension ImportController {
     }
 
     func openPlanning() {
-        guard !isBusy, review == nil, consentRequest == nil else { return }
+        guard !isBusy, review == nil, countdownReview == nil, consentRequest == nil else { return }
         let text = session.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         do {
@@ -561,7 +651,7 @@ extension ImportController {
     }
 
     func advancePlanning(answer: String? = nil) {
-        guard !isBusy, review == nil, consentRequest == nil, session.savedCount == 0, var conversation = session.planning else { return }
+        guard !isBusy, review == nil, countdownReview == nil, consentRequest == nil, session.savedCount == 0, var conversation = session.planning else { return }
         planningIntent = true
         errorMessage = nil; information = nil
         if let answer {

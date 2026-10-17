@@ -6,6 +6,194 @@ import ShikeCore
 @testable import Shike
 
 final class NativeServiceTests: XCTestCase {
+    @MainActor func testDestinationCompletionCountsEachDestinationWithoutDoubleCountingFinishedDrafts() throws {
+        let cases: [(calendar: Set<Int>, countdown: Set<Int>, message: String?)] = [
+            ([], [], nil), ([0], [], nil), ([0], [0], nil),
+            ([0], [1], "已加入日历 1 个，倒数日 1 个。"),
+            ([0, 1], [], "全部日程已加入日历。"),
+            ([], [0, 1], "全部日程已加入倒数日。"),
+            ([0, 1], [0, 1], "全部日程已加入日历和倒数日。"),
+            ([0, 1], [0], "已加入日历 2 个，倒数日 1 个。")
+        ]
+        for scenario in cases {
+            let store = try SessionStore(inMemory: true)
+            let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+                store: store, countdowns: CountdownStore(inMemory: true))
+            var session = ImportSession(); session.text = "完成状态"
+            let controller = ImportController(environment: environment, session: session)
+            XCTAssertNil(controller.destinationCompletionMessage)
+            session.drafts = [reviewEvent("出发", needsReview: false), reviewEvent("回家", needsReview: false)]
+            for index in session.drafts.indices {
+                session.drafts[index].selected = false
+                if scenario.calendar.contains(index) { session.drafts[index].eventIdentifier = "saved-\(index)" }
+                if scenario.countdown.contains(index) { try environment.countdowns.insertConverted([CountdownConversion.from(session.drafts[index])]) }
+            }
+            controller.session = session
+            XCTAssertEqual(controller.destinationCompletionMessage, scenario.message)
+            try controller.persist()
+            let restored = ImportController(environment: environment, session: try XCTUnwrap(store.all().first))
+            XCTAssertEqual(restored.destinationCompletionMessage, scenario.message)
+        }
+    }
+
+    @MainActor func testDestinationCompletionUpdatesAfterCountdownDeletion() throws {
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: try SessionStore(inMemory: true), countdowns: CountdownStore(inMemory: true))
+        var session = ImportSession(); session.text = "出发"; session.drafts = [reviewEvent("出发", needsReview: false)]
+        let controller = ImportController(environment: environment, session: session)
+        controller.addSelectedCountdowns()
+        XCTAssertEqual(controller.destinationCompletionMessage, "全部日程已加入倒数日。")
+        try environment.countdowns.delete(try XCTUnwrap(environment.countdowns.entries.first?.id))
+        XCTAssertNil(controller.destinationCompletionMessage)
+        controller.session.drafts[0].eventIdentifier = "saved"
+        XCTAssertEqual(controller.destinationCompletionMessage, "全部日程已加入日历。")
+    }
+
+    @MainActor func testCountdownActionSkipsExistingItemsInMixedSelectionAndReview() throws {
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: try SessionStore(inMemory: true), countdowns: CountdownStore(inMemory: true))
+        let first = reviewEvent("已有倒数日", needsReview: false), second = reviewEvent("待核对的日子")
+        try environment.countdowns.insertConverted([CountdownConversion.from(first)])
+        var session = ImportSession(); session.text = "混合选择"; session.drafts = [first, second]
+        let controller = ImportController(environment: environment, session: session)
+        XCTAssertEqual(controller.pendingCountdownDrafts.map(\.id), [second.id])
+        controller.addSelectedCountdowns()
+        XCTAssertEqual(controller.countdownReview?.selectedIDs, [second.id])
+        try controller.confirmCountdownReview(second)
+        XCTAssertNil(controller.errorMessage); XCTAssertEqual(environment.countdowns.entries.count, 2)
+        XCTAssertTrue(controller.session.drafts[0].selected, "跳过的项目仍可加入日历")
+        XCTAssertFalse(controller.session.drafts[1].selected)
+        XCTAssertEqual(controller.information, "已将 1 个日程加入倒数日。")
+        XCTAssertTrue(controller.pendingCountdownDrafts.isEmpty)
+        let revision = environment.countdowns.revision
+        controller.information = nil
+        controller.addSelectedCountdowns()
+        XCTAssertNil(controller.information); XCTAssertNil(controller.countdownReview)
+        XCTAssertEqual(environment.countdowns.revision, revision)
+        XCTAssertTrue(controller.session.drafts[0].selected)
+    }
+
+    @MainActor func testCountdownAvailabilityUpdatesWhenStoreChangesAndDeletedDayCanBeAddedAgain() throws {
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: try SessionStore(inMemory: true), countdowns: CountdownStore(inMemory: true))
+        let draft = reviewEvent("旅行", needsReview: false)
+        var session = ImportSession(); session.text = "旅行"; session.drafts = [draft]
+        let controller = ImportController(environment: environment, session: session)
+        var changes = 0
+        let observation = controller.objectWillChange.sink { changes += 1 }
+        defer { observation.cancel() }
+        XCTAssertEqual(controller.pendingCountdownDrafts.count, 1)
+        var entry = try CountdownConversion.from(draft)
+        try environment.countdowns.insertConverted([entry])
+        XCTAssertGreaterThan(changes, 0)
+        XCTAssertTrue(controller.pendingCountdownDrafts.isEmpty)
+        entry.title = "修改后的旅行"; try environment.countdowns.save(entry)
+        XCTAssertTrue(controller.pendingCountdownDrafts.isEmpty, "改名后仍识别为已加入")
+        changes = 0
+        try environment.countdowns.delete(entry.id)
+        XCTAssertGreaterThan(changes, 0); XCTAssertEqual(controller.pendingCountdownDrafts.count, 1)
+        controller.addSelectedCountdowns()
+        XCTAssertEqual(environment.countdowns.entries.count, 1)
+        XCTAssertNotEqual(environment.countdowns.entries.first?.id, entry.id)
+        XCTAssertFalse(controller.session.drafts[0].selected)
+    }
+
+    @MainActor func testCountdownReviewRechecksExternalAdditionsBeforeSaving() throws {
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: try SessionStore(inMemory: true), countdowns: CountdownStore(inMemory: true))
+        let draft = reviewEvent("核对中的日子")
+        var session = ImportSession(); session.text = "核对"; session.drafts = [draft]
+        let controller = ImportController(environment: environment, session: session)
+        controller.addSelectedCountdowns()
+        var entry = try CountdownConversion.from(draft); entry.title = "其他窗口已添加"
+        try environment.countdowns.insertConverted([entry])
+        let revision = environment.countdowns.revision
+        try controller.confirmCountdownReview(draft)
+        XCTAssertNil(controller.countdownReview); XCTAssertNil(controller.information)
+        XCTAssertEqual(environment.countdowns.entries, [entry])
+        XCTAssertEqual(environment.countdowns.revision, revision)
+        XCTAssertTrue(controller.session.drafts[0].selected)
+    }
+
+    @MainActor func testCalendarFirstDraftCanBeReselectedForCountdownWithoutDuplicateCalendarEvents() async throws {
+        let sessionStore = try SessionStore(inMemory: true)
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: sessionStore, countdowns: CountdownStore(inMemory: true))
+        var session = ImportSession(); session.text = "先加入日历，再加入倒数日"; session.drafts = [reviewEvent("上海飞北京", needsReview: false)]
+        let controller = ImportController(environment: environment, session: session)
+        controller.saveSelected(); try await waitForOperation(controller)
+        let saved = try XCTUnwrap(controller.session.drafts.first)
+        XCTAssertTrue(saved.isSaved); XCTAssertFalse(saved.selected)
+        controller.session.drafts[0].selected = true
+        controller.addSelectedCountdowns()
+        XCTAssertNil(controller.errorMessage); XCTAssertNil(controller.countdownReview)
+        XCTAssertEqual(environment.countdowns.entries.map(\.title), ["上海飞北京"])
+        XCTAssertFalse(controller.session.drafts[0].selected)
+        XCTAssertEqual(controller.session.drafts[0].eventIdentifier, saved.eventIdentifier)
+        XCTAssertEqual(controller.session.drafts[0].calendarItemIdentifier, saved.calendarItemIdentifier)
+        // Reloading the record keeps both the calendar identity and retry protection.
+        let restored = ImportController(environment: environment, session: try XCTUnwrap(sessionStore.all().first))
+        restored.session.drafts[0].selected = true
+        restored.saveSelected(); try await waitForOperation(restored)
+        XCTAssertTrue(restored.session.drafts[0].selected, "日历操作应跳过已保存的日程，保留倒数日选择")
+        restored.addSelectedCountdowns()
+        XCTAssertEqual(environment.countdowns.entries.count, 1)
+        XCTAssertTrue(restored.pendingCountdownDrafts.isEmpty)
+        let events = try await environment.calendars.events(in: DateInterval(start: saved.start!.addingTimeInterval(-1), duration: 7200))
+        XCTAssertEqual(events.map(\.eventID), [saved.eventIdentifier!])
+    }
+
+    @MainActor func testCountdownConversionDeselectsOnlySuccessfulTargetsAndStillAllowsCalendarSave() async throws {
+        var first = reviewEvent("出发", needsReview: false); first.calendarID = nil; first.end = nil
+        var ignored = reviewEvent("未选中", needsReview: false); ignored.selected = false
+        let sessionStore = try SessionStore(inMemory: true)
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: sessionStore, countdowns: CountdownStore(inMemory: true))
+        var session = ImportSession(); session.text = "出发"; session.drafts = [first, ignored]
+        let controller = ImportController(environment: environment, session: session)
+        controller.addSelectedCountdowns()
+        XCTAssertNil(controller.errorMessage); XCTAssertEqual(environment.countdowns.entries.count, 1)
+        XCTAssertTrue(controller.session.drafts.allSatisfy { !$0.selected })
+        XCTAssertEqual(try sessionStore.all().first?.drafts, controller.session.drafts)
+        controller.session.drafts[0].selected = true
+        controller.addSelectedCountdowns()
+        XCTAssertEqual(environment.countdowns.entries.count, 1)
+        XCTAssertTrue(controller.session.drafts[0].selected, "已加入倒数日时不再处理该项目")
+        controller.session.drafts[0].selected = true
+        controller.session.drafts[0].end = first.start!.addingTimeInterval(3600)
+        controller.session.drafts[0].calendarID = "test-calendar"
+        controller.saveSelected(); try await waitForOperation(controller)
+        XCTAssertEqual(controller.session.savedCount, 1)
+        XCTAssertFalse(controller.session.drafts[0].selected)
+    }
+    @MainActor func testCountdownReviewRequiresMissingDateAndKeepsCalendarSuggestions() throws {
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: try SessionStore(inMemory: true), countdowns: CountdownStore(inMemory: true))
+        let ready = try environment.calendars.save(reviewEvent("可保存", needsReview: false))
+        var pending = reviewEvent("日期待补全"); pending.start = nil; pending.end = nil; pending.calendarID = nil
+        var session = ImportSession(); session.text = "安排"; session.drafts = [ready, pending]
+        let controller = ImportController(environment: environment, session: session)
+        controller.addSelectedCountdowns()
+        XCTAssertEqual(controller.countdownReviewDraft?.id, pending.id); XCTAssertTrue(environment.countdowns.entries.isEmpty)
+        XCTAssertThrowsError(try controller.confirmCountdownReview(pending))
+        controller.cancelCountdownReview(); XCTAssertTrue(environment.countdowns.entries.isEmpty)
+        controller.addSelectedCountdowns(); pending.start = .now
+        try controller.confirmCountdownReview(pending)
+        XCTAssertNil(controller.countdownReview); XCTAssertEqual(environment.countdowns.entries.count, 2)
+        XCTAssertEqual(controller.session.drafts[0].eventIdentifier, ready.eventIdentifier)
+        XCTAssertTrue(controller.session.drafts.allSatisfy { !$0.selected })
+        XCTAssertTrue(controller.session.drafts[1].needsReview, "倒数日日期确认不代表确认日历建议")
+    }
+    @MainActor func testCountdownWriteFailureKeepsSelectionAndCalendarUntouched() throws {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).appendingPathComponent("days.json")
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: try SessionStore(inMemory: true), countdowns: CountdownStore(url: missing))
+        var session = ImportSession(); session.text = "保存失败"; session.drafts = [reviewEvent("旅行", needsReview: false)]
+        let controller = ImportController(environment: environment, session: session)
+        controller.addSelectedCountdowns()
+        XCTAssertNotNil(controller.errorMessage); XCTAssertTrue(controller.session.drafts[0].selected)
+        XCTAssertEqual(controller.session.savedCount, 0); XCTAssertTrue(environment.countdowns.entries.isEmpty)
+    }
     @MainActor func testSearchConfigurationAutosaveAndToggleRetainIndependentCredentials() throws {
         let defaults = try consentDefaults(), preferences = Preferences(defaults: defaults)
         XCTAssertFalse(preferences.searchReady)

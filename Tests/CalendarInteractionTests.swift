@@ -4,6 +4,91 @@ import ShikeCore
 @testable import Shike
 
 final class CalendarInteractionTests: XCTestCase {
+    @MainActor func testNativeDeletingCurrentAndFutureKeepsEarlierAndUnrelatedEvents() async throws {
+        #if targetEnvironment(simulator)
+        let service = CalendarService(useDemo: false); try await service.requestAccess()
+        let source = try XCTUnwrap(service.store.sources.first(where: { $0.sourceType == .local }) ?? service.store.defaultCalendarForNewEvents?.source)
+        for allDay in [false, true] {
+            let group = EKCalendar(for: .event, eventStore: service.store); group.title = "Shike Future Deletion Test"; group.source = source
+            try service.store.saveCalendar(group, commit: true)
+            defer { try? service.store.removeCalendar(group, commit: true) }
+            let calendar = Calendar.current, day = Calendar.current.startOfDay(for: .now)
+            let event = EKEvent(eventStore: service.store); event.calendar = group; event.title = "重复日程"
+            event.startDate = day.addingTimeInterval(allDay ? 0 : 36000)
+            event.endDate = allDay ? calendar.date(byAdding: .day, value: 1, to: day)! : event.startDate.addingTimeInterval(3600)
+            event.isAllDay = allDay
+            event.recurrenceRules = [EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: EKRecurrenceEnd(occurrenceCount: 3))]
+            try service.store.save(event, span: .thisEvent)
+            let other = EKEvent(eventStore: service.store); other.calendar = group; other.title = "另一项日程"
+            other.startDate = day.addingTimeInterval(72000); other.endDate = other.startDate.addingTimeInterval(3600)
+            try service.store.save(other, span: .thisEvent); service.refresh()
+            let range = DateInterval(start: day, end: calendar.date(byAdding: .day, value: 4, to: day)!)
+            let before = try await service.events(in: range, calendarIDs: [group.calendarIdentifier])
+            let repeated = before.filter(\.isRecurring)
+            XCTAssertEqual(repeated.count, 3)
+            let selected = try service.currentSnapshot(try XCTUnwrap(repeated.dropFirst().first))
+            XCTAssertTrue(selected.isRecurring)
+            try service.deleteOccurrence(selected, scope: .futureOccurrences)
+            let after = try await service.events(in: range, calendarIDs: [group.calendarIdentifier])
+            XCTAssertEqual(after.map(\.title), ["重复日程", "另一项日程"])
+            XCTAssertEqual(after.first?.start, repeated.first?.start)
+        }
+        #endif
+    }
+
+    @MainActor func testDeletionRejectsChangedEventAndInvalidFutureScope() async throws {
+        let start = Date.now
+        let original = CalendarEventSnapshot(eventID: "event", itemID: "event", calendarID: "test-work", title: "最新标题", start: start, end: start.addingTimeInterval(3600))
+        let service = CalendarService(useDemo: true, fixtureEvents: [original])
+        var stale = original; stale.title = "旧标题"
+        XCTAssertThrowsError(try service.deleteOccurrence(stale))
+        XCTAssertThrowsError(try service.deleteOccurrence(original, scope: .futureOccurrences))
+        let remaining = try await service.events(in: DateInterval(start: start, duration: 7200))
+        XCTAssertEqual(remaining, [original])
+        try service.deleteOccurrence(original)
+        XCTAssertThrowsError(try service.deleteOccurrence(original))
+    }
+
+    @MainActor func testConversionReadsReadonlyEventButCannotDeleteItAndRejectsStaleDeletion() async throws {
+        let start = Date.now
+        let readonly = CalendarEventSnapshot(eventID: "ro", itemID: "ro", calendarID: "test-readonly", title: "节日", start: start, end: start.addingTimeInterval(3600))
+        var writable = readonly; writable.eventID = "rw"; writable.itemID = "rw"; writable.calendarID = "test-work"
+        let service = CalendarService(useDemo: true, fixtureEvents: [readonly, writable])
+        let snapshot = try service.currentSnapshot(readonly)
+        XCTAssertEqual(try CountdownConversion.from(snapshot).title, "节日")
+        XCTAssertThrowsError(try service.deleteOccurrence(readonly))
+        try service.reschedule(writable, to: DateInterval(start: start.addingTimeInterval(3600), duration: 3600))
+        XCTAssertThrowsError(try service.deleteOccurrence(writable))
+        let events = try await service.events(in: DateInterval(start: start, duration: 86400))
+        XCTAssertEqual(events.count, 2)
+        let moved = try XCTUnwrap(events.first { $0.eventID == "rw" })
+        try service.deleteOccurrence(moved)
+        let remaining = try await service.events(in: DateInterval(start: start, duration: 86400))
+        XCTAssertEqual(remaining.map(\.eventID), ["ro"])
+    }
+    @MainActor func testNativeConvertedOccurrenceDeletionPreservesRecurringSeries() async throws {
+        #if targetEnvironment(simulator)
+        let service = CalendarService(useDemo: false); try await service.requestAccess()
+        let source = try XCTUnwrap(service.store.sources.first(where: { $0.sourceType == .local }) ?? service.store.defaultCalendarForNewEvents?.source)
+        let group = EKCalendar(for: .event, eventStore: service.store); group.title = "Shike Conversion Test"; group.source = source
+        try service.store.saveCalendar(group, commit: true)
+        defer { try? service.store.removeCalendar(group, commit: true) }
+        let day = Calendar.current.startOfDay(for: .now)
+        let event = EKEvent(eventStore: service.store); event.calendar = group; event.title = "每日出行"
+        event.startDate = day.addingTimeInterval(36000); event.endDate = event.startDate.addingTimeInterval(3600)
+        event.recurrenceRules = [EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: EKRecurrenceEnd(occurrenceCount: 3))]
+        try service.store.save(event, span: .thisEvent); service.refresh()
+        let range = DateInterval(start: day, duration: 4 * 86400)
+        let before = try await service.events(in: range, calendarIDs: [group.calendarIdentifier])
+        XCTAssertEqual(before.count, 3)
+        let selected = try service.currentSnapshot(before[1]), days = CountdownStore(inMemory: true)
+        try days.insertConverted([CountdownConversion.from(selected)])
+        try service.deleteOccurrence(selected)
+        let after = try await service.events(in: range, calendarIDs: [group.calendarIdentifier])
+        XCTAssertEqual(after.map(\.start), [before[0].start, before[2].start])
+        XCTAssertEqual(days.entries.count, 1)
+        #endif
+    }
     func testPagingDistinguishesShortDragFlickAndFullSwipe() {
         XCTAssertEqual(CalendarPaging.direction(distance: 12, velocity: 700, width: 390), 0)
         XCTAssertEqual(CalendarPaging.direction(distance: -30, velocity: -100, width: 390), 0)

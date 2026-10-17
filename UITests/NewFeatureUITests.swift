@@ -59,7 +59,7 @@ final class NewFeatureUITests: XCTestCase {
         activate(toggle)
         XCTAssertTrue(status.label.contains("已开启"))
         if app.buttons["section-0"].isHittable { activate(app.buttons["section-0"]) }
-        else { app.tabBars.buttons["导入"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
+        else { app.tabBars.buttons["计划"].coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)).tap() }
         XCTAssertTrue(app.textViews["sourceText"].waitForExistence(timeout: 5))
         XCTAssertFalse(app.switches["searchEnabled"].exists)
         capture("search-home-unchanged", app: app)
@@ -340,7 +340,7 @@ final class NewFeatureUITests: XCTestCase {
         if app.buttons["收起键盘"].isHittable { activate(app.buttons["收起键盘"]) }
         section(2, name: "设置", app: app)
         XCTAssertTrue(app.staticTexts["日历偏好"].waitForExistence(timeout: 5))
-        section(0, name: "导入", app: app)
+        section(0, name: "计划", app: app)
         XCTAssertEqual(input.value as? String, edited)
         let extract = app.buttons["parseEvents"]; reveal(extract, app: app); activate(extract)
         XCTAssertTrue(app.buttons["editEvent-产品设计评审"].waitForExistence(timeout: 8))
@@ -353,7 +353,7 @@ final class NewFeatureUITests: XCTestCase {
         activate(app.buttons["voiceInput"])
         let transcribed = NSPredicate { _, _ in (input.value as? String ?? "").contains("地点在三楼") }
         expectation(for: transcribed, evaluatedWith: input); waitForExpectations(timeout: 5)
-        section(2, name: "设置", app: app); section(0, name: "导入", app: app)
+        section(2, name: "设置", app: app); section(0, name: "计划", app: app)
         XCTAssertEqual(app.buttons["voiceInput"].label, "语音输入")
         XCTAssertEqual(input.value as? String, "明天下午三点开会，地点在三楼。")
         XCTAssertFalse(app.staticTexts["voiceInputStatus"].exists)
@@ -471,7 +471,7 @@ final class NewFeatureUITests: XCTestCase {
         activate(app.buttons["deleteSelectedHistory"]); activate(app.alerts.buttons["删除"].firstMatch)
         XCTAssertTrue(first.waitForNonExistence(timeout: 5)); XCTAssertFalse(second.exists); XCTAssertTrue(kept.exists)
         XCTAssertFalse(app.buttons["finishHistorySelection"].exists)
-        section(0, name: "导入", app: app); section(1, name: "记录", app: app)
+        section(0, name: "计划", app: app); section(1, name: "记录", app: app)
         XCTAssertFalse(first.exists); XCTAssertFalse(second.exists, "删除当前导入后，切换页面不能重新保存该记录")
         hold(kept, app: app); activate(kept)
         XCTAssertEqual(app.staticTexts["historySelectionCount"].label, "已选择 0 条记录")
