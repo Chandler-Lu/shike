@@ -2,6 +2,43 @@
 import XCTest
 
 final class ShikeUITests: XCTestCase {
+    func testCountdownColorPersistsAndCanReturnToPaper() {
+        continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-countdown-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        if app.tabBars.buttons["倒数日"].isHittable { app.tabBars.buttons["倒数日"].tap() }
+        else { app.buttons["倒数日"].firstMatch.tap() }
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "countdown-")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.tap()
+        let edit = app.buttons["editCountdown"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
+        let peach = app.buttons["countdownColor-peach"]
+        revealInCountdownSheet(peach, app: app); peach.tap()
+        XCTAssertEqual(peach.value as? String, "已选择")
+        capture("countdown-color-picker", app: app)
+        app.buttons["saveCountdown"].tap()
+        XCTAssertTrue(app.buttons["saveCountdown"].waitForNonExistence(timeout: 20))
+        XCTAssertTrue(edit.waitForExistence(timeout: 5))
+        capture("countdown-colored-detail", app: app)
+        edit.tap(); revealInCountdownSheet(peach, app: app)
+        XCTAssertEqual(peach.value as? String, "已选择")
+        app.buttons["countdownColor-cream"].tap()
+        app.buttons["cancelCountdownEditing"].tap()
+        XCTAssertTrue(app.buttons["cancelCountdownEditing"].waitForNonExistence(timeout: 5))
+        XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
+        revealInCountdownSheet(peach, app: app)
+        XCTAssertEqual(peach.value as? String, "已选择", "Cancel must keep the saved color")
+        let paper = app.buttons["countdownColor-paper"]
+        paper.tap(); app.buttons["saveCountdown"].tap()
+        XCTAssertTrue(app.buttons["saveCountdown"].waitForNonExistence(timeout: 20))
+        XCTAssertTrue(edit.waitForExistence(timeout: 5)); edit.tap()
+        revealInCountdownSheet(paper, app: app)
+        XCTAssertEqual(paper.value as? String, "已选择")
+        app.buttons["cancelCountdownEditing"].tap()
+    }
+
     func testLocalBackupPreviewAndMergeRestore() {
         continueAfterFailure = false
         let app = XCUIApplication()

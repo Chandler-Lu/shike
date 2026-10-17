@@ -40,6 +40,24 @@ public enum CountdownLayout: String, Codable, CaseIterable, Sendable {
     public var title: String { switch self { case .single: "一行一个"; case .double: "一行两个"; case .strip: "窄条列表" } }
     public var symbol: String { switch self { case .single: "rectangle"; case .double: "square.grid.2x2"; case .strip: "list.bullet" } }
 }
+/// Paper colors for the in-app card. Optional on Countdown for older backups.
+public enum CountdownCardColor: String, Codable, CaseIterable, Sendable {
+    case paper, cream, peach, sage, sky, lilac
+    public var title: String {
+        switch self {
+        case .paper: "原纸色"
+        case .cream: "奶油黄"
+        case .peach: "蜜桃粉"
+        case .sage: "鼠尾草绿"
+        case .sky: "雾蓝"
+        case .lilac: "浅丁香"
+        }
+    }
+    public init(from decoder: Decoder) throws {
+        let value = try decoder.singleValueContainer().decode(String.self)
+        self = Self(rawValue: value) ?? .paper
+    }
+}
 /// Wall-clock time in the countdown's time zone; nil on a countdown means day precision.
 public struct CountdownTime: Codable, Equatable, Sendable, CustomStringConvertible {
     public var hour: Int
@@ -87,6 +105,7 @@ public struct Countdown: Codable, Identifiable, Equatable, Sendable {
     public var reminder = CountdownReminder()
     public var targetTime: CountdownTime?
     public var includesStartDay: Bool?
+    public var cardColor: CountdownCardColor?
     public init(id: UUID = UUID(), title: String = "", date: CivilDate = CivilDate(.now)) {
         self.id = id; self.title = title; self.anchorDate = date
     }

@@ -725,6 +725,29 @@ extension ImportController {
 
     #if DEBUG
     private func fixturePlanningReply(_ conversation: PlanningConversation, zone: TimeZone) -> PlanningReply {
+        if ProcessInfo.processInfo.arguments.contains("-promotion-search-fixture") {
+            var calendar = Calendar(identifier: .gregorian); calendar.timeZone = zone
+            let day = calendar.date(byAdding: .day, value: 1, to: max(conversation.start, .now))!
+            let stops = [("故宫慢游", 9, 12, "午门", "提前实名预约门票，从午门进入。"),
+                         ("午餐与休息", 12, 13, "故宫周边", "给午餐和步行留出时间。交通耗时为估算。"),
+                         ("景山散步", 14, 16, "景山公园", "放慢脚步，看看北京的秋天；出发前再核对开放情况。")]
+            let drafts = stops.map { title, start, end, location, notes in
+                var draft = EventDraft(); draft.title = title; draft.category = .travel
+                draft.start = calendar.date(bySettingHour: start, minute: 0, second: 0, of: day)
+                draft.end = calendar.date(bySettingHour: end, minute: 0, second: 0, of: day)
+                draft.timeZoneIdentifier = zone.identifier; draft.location = location
+                draft.notes = notes; draft.sourceExcerpt = conversation.goal
+                return draft
+            }
+            var reply = PlanningReply(kind: .proposal, message: "上午留给故宫，午后慢慢散步。已参考开放时间与预约说明，门票请提前预约。交通时间为估算，安排可以继续调整。", drafts: drafts)
+            var research = PlanningResearch()
+            research.sources = [
+                PlanningSource(id: "palace-hours", title: "故宫博物院 · 开放时间", url: URL(string: "https://www.dpm.org.cn/Visit.html")!, content: "旺季 8:30 开放，17:00 闭馆；从午门进入。", kind: .page),
+                PlanningSource(id: "palace-booking", title: "故宫博物院 · 参观预约", url: URL(string: "https://ticket.dpm.org.cn/")!, content: "提前实名预约，通过官方渠道购买门票。", kind: .page)
+            ]
+            reply.research = research; reply.sourceIDs = research.sources.map(\.id)
+            return reply
+        }
         if !conversation.turns.contains(where: { $0.role == "user" }) {
             return PlanningReply(kind: .question, message: "你希望每次留多少时间？", options: ["每次 30 分钟，晚上安排", "每次 1 小时，下午安排", "你来决定"])
         }

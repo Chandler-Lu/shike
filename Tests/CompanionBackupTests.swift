@@ -5,6 +5,50 @@ import ShikeCore
 @testable import Shike
 
 final class CompanionBackupTests: XCTestCase {
+    @MainActor func testPromotionViewAssets() throws {
+        CompanionStyle.registerFont()
+        let now = CivilDate(year: 2026, month: 10, day: 17).date()!
+        func capture<V: View>(_ name: String, _ view: V) throws {
+            let renderer = ImageRenderer(content: view); renderer.scale = 3
+            let image = try XCTUnwrap(renderer.uiImage)
+            let shot = XCTAttachment(image: image); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        }
+        let names = ["新的起点", "等一场花开", "和你在一起", "周末去野餐", "下一次，一起去看海", "生日的小愿望"]
+        let offsets = [-100, 30, -365, 7, 12, 60]
+        var entries: [Countdown] = []
+        for (index, color) in CountdownCardColor.allCases.enumerated() {
+            var day = Countdown(title: names[index], date: CivilDate(now.addingTimeInterval(Double(offsets[index]) * 86400)))
+            day.cardColor = color; entries.append(day)
+            // The promotional card uses the author's actual anniversary;
+            // widget references retain their separate example dates.
+            if color == .peach { day.anchorDate = CivilDate(year: 2022, month: 11, day: 23) }
+            try capture("promotion-color-\(color.rawValue)", CountdownCard(entry: day, category: nil, now: now)
+                .frame(width: 286).padding(3).foregroundStyle(Notebook.ink).environment(\.colorScheme, .light))
+        }
+        try capture("promotion-color-dark", CountdownCard(entry: entries[2], category: nil, now: now, countUnit: .months)
+            .frame(width: 320).padding(3).foregroundStyle(Notebook.ink).environment(\.colorScheme, .dark))
+        for layout in CountdownLayout.allCases {
+            let columns = Array(repeating: GridItem(.flexible(), spacing: 12), count: layout == .double ? 2 : 1)
+            try capture("promotion-layout-\(layout.rawValue)", LazyVGrid(columns: columns, spacing: 12) {
+                ForEach(Array(entries.prefix(2))) { CountdownCard(entry: $0, category: nil, now: now, layout: layout) }
+            }.padding(4).frame(width: 360).foregroundStyle(Notebook.ink).environment(\.colorScheme, .light))
+        }
+        let snapshot = CountdownSnapshot(entries: entries)
+        let entry = CountdownWidgetEntry(date: now, snapshot: snapshot, group: "all")
+        for (family, size) in [(WidgetFamily.systemSmall, CGSize(width: 170, height: 170)), (.systemMedium, CGSize(width: 364, height: 170)), (.systemLarge, CGSize(width: 364, height: 382)), (.accessoryRectangular, CGSize(width: 180, height: 84))] {
+            let dark = family == .accessoryRectangular
+            try capture("promotion-widget-\(family)", CountdownWidgetContent(entry: entry, family: family)
+                .padding(16).frame(width: size.width, height: size.height)
+                .background(CompanionPaper()).environment(\.colorScheme, dark ? .dark : .light))
+        }
+        #if !targetEnvironment(macCatalyst)
+        let lock = CountdownWidgetEntry(date: now, snapshot: snapshot, group: "all", countdownID: entries[4].id, secondCountdownID: entries[2].id)
+        try capture("promotion-lock", CountdownLockScreenContent(entry: lock, family: .accessoryRectangular)
+            .environment(\.colorScheme, .dark).environment(\.widgetRenderingMode, .vibrant)
+            .frame(width: 170, height: 76).padding(12).background(.black))
+        #endif
+    }
+
     func testBuiltAppPublishesItsActualCloudDriveContainer() throws {
         let info = try XCTUnwrap(Bundle.main.infoDictionary)
         let id = try XCTUnwrap(info["ShikeCloudContainer"] as? String)

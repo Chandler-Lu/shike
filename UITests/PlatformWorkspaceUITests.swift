@@ -1,6 +1,35 @@
 import XCTest
 
 final class PlatformWorkspaceUITests: XCTestCase {
+    /// Reproducible, public examples for promotion; never reads personal data or calls an API.
+    func testPromotionWorkspace() {
+        continueAfterFailure = false
+        #if !targetEnvironment(macCatalyst)
+        if UIDevice.current.userInterfaceIdiom == .pad { XCUIDevice.shared.orientation = .landscapeLeft }
+        #endif
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-seed-example", "-planning-fixture", "-promotion-search-fixture", "-countdown-fixture", "-promotion-colors", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launch()
+        XCTAssertTrue(app.textViews["sourceText"].waitForExistence(timeout: 15))
+        capture("promotion-home", app)
+        let plan = app.buttons["planEvents"]; reveal(plan, app: app); plan.activateControl()
+        let start = app.buttons["startPlanning"]
+        XCTAssertTrue(start.waitForExistence(timeout: 5)); reveal(start, app: app); start.activateControl()
+        let sources = app.descendants(matching: .any).matching(identifier: "planningSources").firstMatch
+        XCTAssertTrue(sources.waitForExistence(timeout: 10)); reveal(sources, app: app); sources.activateControl()
+        Thread.sleep(forTimeInterval: 0.8)
+        capture("promotion-planning", app)
+        app.buttons["closePlanning"].activateControl()
+        capture("promotion-workspace", app)
+        section(4, "倒数日", app: app)
+        XCTAssertTrue(app.staticTexts["3 个日子"].waitForExistence(timeout: 5))
+        capture("promotion-countdowns", app)
+        let card = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "countdown-")).firstMatch
+        XCTAssertTrue(card.waitForExistence(timeout: 5)); card.activateControl()
+        XCTAssertTrue(app.buttons["editCountdown"].waitForExistence(timeout: 5))
+        capture("promotion-detail", app)
+    }
+
     private func launch() -> XCUIApplication {
         continueAfterFailure = false
         let app = XCUIApplication()
@@ -16,7 +45,15 @@ final class PlatformWorkspaceUITests: XCTestCase {
         else { app.buttons[name].firstMatch.activateControl() }
     }
     private func capture(_ name: String, _ app: XCUIApplication) {
-        let shot = XCTAttachment(screenshot: app.screenshot()); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        #if targetEnvironment(macCatalyst)
+        let screenshot = app.windows.firstMatch.screenshot()
+        #else
+        let screenshot = app.screenshot()
+        #endif
+        let shot = XCTAttachment(screenshot: screenshot); shot.name = name; shot.lifetime = .keepAlways; add(shot)
+        // Allow the host capture script to read the active simulator display.
+        // XCTest captures the inactive outer display on folding simulators.
+        if name.hasPrefix("promotion-") { Thread.sleep(forTimeInterval: 2) }
     }
     private func reveal(_ element: XCUIElement, app: XCUIApplication) {
         for _ in 0..<6 where !element.isHittable { app.swipeUp() }

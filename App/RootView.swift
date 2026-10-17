@@ -334,6 +334,9 @@ struct HomeView: View {
                 if AppIdentity.isUITesting && ProcessInfo.processInfo.arguments.contains("-seed-example") && controller.session.text.isEmpty {
                     controller.session.text = "明天下午两点到三点半，产品设计评审，三楼会议室。带上新的交互稿。\n\n后天上午十点和小林在街角咖啡馆喝咖啡。"
                     if ProcessInfo.processInfo.arguments.contains("-planning-fixture") { controller.session.text = "这周想读完一本书，帮我找个安静的时间。" }
+                    if ProcessInfo.processInfo.arguments.contains("-promotion-search-fixture") {
+                        controller.session.text = "明天去北京玩一天，上午逛故宫，下午留点时间散步，帮我安排。"
+                    }
                     if ProcessInfo.processInfo.arguments.contains("-store-screenshots") {
                         controller.session.createdAt = ISO8601DateFormatter().date(from: "2026-10-13T09:41:00+08:00")!
                         controller.session.referenceTimeZone = "Asia/Shanghai"

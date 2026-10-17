@@ -419,8 +419,9 @@ struct CountdownCard: View {
     var onCountTap: (() -> Void)? = nil
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     private var compact: Bool { layout != .single }
+    private var palette: CountdownCardColor { entry.cardColor ?? .paper }
     var body: some View {
-        PaperCard {
+        PaperCard(tint: palette.paperFill) {
             if layout == .strip && !dynamicTypeSize.isAccessibilitySize {
                 HStack(alignment: .center, spacing: 14) {
                     VStack(alignment: .leading, spacing: 5) { heading; dateLabel }
@@ -450,7 +451,7 @@ struct CountdownCard: View {
             Text(entry.title).font(Notebook.handwriting(compact ? 20 : 25, relativeTo: .title2))
                 .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
                 .multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
-            if entry.pinned { Image(systemName: "pin.fill").font(.system(size: compact ? 12 : 14)).foregroundStyle(Notebook.accent).accessibilityLabel("已置顶") }
+            if entry.pinned { Image(systemName: "pin.fill").font(.system(size: compact ? 12 : 14)).foregroundStyle(palette.countInk).accessibilityLabel("已置顶") }
         }
     }
     @ViewBuilder private func countLabel(alignment: HorizontalAlignment = .leading) -> some View {
@@ -467,7 +468,7 @@ struct CountdownCard: View {
         let value = CountdownDisplayValue(entry, now: now, unit: countUnit)
         return VStack(alignment: alignment, spacing: 3) {
             if countUnit != .days && !compact {
-                CountdownCountColumns(value: value)
+                CountdownCountColumns(value: value, ink: palette.countInk)
             } else if value.phase == .today && countUnit == .days {
                 Text(value.status).font(Notebook.handwriting(compact ? 23 : 30, relativeTo: .title))
                     .lineLimit(1).minimumScaleFactor(0.7)
@@ -487,7 +488,7 @@ struct CountdownCard: View {
                 }
             }
         }
-        .foregroundStyle(Notebook.accent)
+        .foregroundStyle(palette.countInk)
         .frame(maxWidth: .infinity, alignment: alignment == .trailing ? .trailing : .leading)
         .accessibilityElement(children: .ignore).accessibilityLabel(value.label)
         .accessibilityIdentifier("countdownValue-\(entry.id)")
@@ -502,6 +503,7 @@ struct CountdownCard: View {
 private struct CountdownCountColumns: View {
     let value: CountdownDisplayValue
     var numberSize: CGFloat = 36
+    var ink: Color = Notebook.accent
     var body: some View {
         VStack(spacing: 12) {
             Text(value.status).font(.caption)
@@ -516,7 +518,7 @@ private struct CountdownCountColumns: View {
                 }
             }
             if let time = value.time { Text(time).font(.system(.body, design: .monospaced)).monospacedDigit() }
-        }.frame(maxWidth: .infinity).padding(.vertical, 8).foregroundStyle(Notebook.accent)
+        }.frame(maxWidth: .infinity).padding(.vertical, 8).foregroundStyle(ink)
             .accessibilityElement(children: .ignore).accessibilityLabel(value.label)
     }
 }
@@ -687,6 +689,7 @@ struct CountdownEditor: View {
                             Toggle("置顶", isOn: $entry.pinned)
                         }
                     }
+                    colorPicker
                     PaperCard {
                         VStack(alignment: .leading, spacing: 14) {
                             Text("备注").font(Notebook.handwriting(23))
@@ -776,6 +779,44 @@ struct CountdownEditor: View {
         let existing = milestoneText.components(separatedBy: CharacterSet(charactersIn: ",，、;； \n\t")).compactMap(Int.init)
         guard !existing.contains(count) else { return }
         milestoneText += milestoneText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "\(count)" : ", \(count)"
+    }
+    private var colorPicker: some View {
+        PaperCard {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("卡片颜色").font(Notebook.handwriting(23))
+                Text("为这个日子，选一张彩色纸。").font(.subheadline).foregroundStyle(Notebook.secondaryInk)
+                CountdownCard(entry: colorPreview, category: nil, now: .now, layout: .strip)
+                    .accessibilityHidden(true)
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: dynamicTypeSize.isAccessibilitySize ? 2 : 3), spacing: 12) {
+                    ForEach(CountdownCardColor.allCases, id: \.self) { color in
+                        let selected = (entry.cardColor ?? .paper) == color
+                        Button {
+                            focused = nil
+                            entry.cardColor = color == .paper ? nil : color
+                        } label: {
+                            VStack(spacing: 7) {
+                                ZStack {
+                                    PencilBorder().fill(color.paperFill)
+                                    PencilBorder().stroke(selected ? Notebook.accent : Notebook.ink.opacity(0.3), lineWidth: selected ? 2 : 1)
+                                    Image(systemName: "checkmark").font(.body.weight(.semibold))
+                                        .foregroundStyle(Notebook.accent).opacity(selected ? 1 : 0)
+                                }.frame(height: 40)
+                                Text(color.title).font(.caption).foregroundStyle(Notebook.ink)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }.padding(3).frame(maxWidth: .infinity).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                            .accessibilityLabel(color.title).accessibilityValue(selected ? "已选择" : "未选择")
+                            .accessibilityAddTraits(selected ? .isSelected : [])
+                            .accessibilityIdentifier("countdownColor-\(color.rawValue)")
+                    }
+                }
+            }
+        }
+    }
+    private var colorPreview: Countdown {
+        var value = entry
+        if value.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { value.title = "值得记住的一天" }
+        return value
     }
     private func save() {
         do {

@@ -43,6 +43,9 @@ import ShikeCore
                 second.categoryID = CountdownCategory.defaults[0].id
                 var third = Countdown(title: "每年的小小纪念", date: CivilDate(c.date(byAdding: .day, value: 30, to: .now)!))
                 third.recurrence = .yearly; third.categoryID = CountdownCategory.defaults[0].id
+                if ProcessInfo.processInfo.arguments.contains("-promotion-colors") {
+                    first.cardColor = .sky; second.cardColor = .peach; third.cardColor = .sage
+                }
                 document.records += [first, second, third].map { CountdownRecord($0) }
             }
             #endif

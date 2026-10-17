@@ -176,6 +176,24 @@ final class CountdownTests: XCTestCase {
         let oldPreferences = Data(#"{"visibleDays":3}"#.utf8)
         XCTAssertNil(try JSONDecoder().decode(CalendarPreferences.self, from: oldPreferences).countdownLayout)
     }
+    func testCardColorSurvivesRecordsAndOldOrFutureColorsRemainReadable() throws {
+        let legacy = Data(#"{"id":"00000000-0000-4000-8000-000000000001","title":"纪念日","anchorDate":"2026-10-14","calendar":"gregorian","recurrence":"none","notes":"保留备注","pinned":false,"reminder":{"daysBefore":[],"hour":9,"minute":0}}"#.utf8)
+        var value = try JSONDecoder().decode(Countdown.self, from: legacy)
+        XCTAssertNil(value.cardColor)
+        for color in CountdownCardColor.allCases {
+            value.cardColor = color
+            let record = CountdownRecord(value)
+            let restored = try JSONDecoder().decode(CountdownRecord.self, from: JSONEncoder().encode(record))
+            XCTAssertEqual(restored.countdown, value)
+        }
+        var future = try XCTUnwrap(JSONSerialization.jsonObject(with: legacy) as? [String: Any])
+        future["cardColor"] = "future-paper-color"
+        let restored = try JSONDecoder().decode(Countdown.self, from: JSONSerialization.data(withJSONObject: future))
+        XCTAssertEqual(restored.cardColor, .paper)
+        XCTAssertEqual(restored.notes, "保留备注")
+        value.cardColor = .peach
+        XCTAssertNil(CountdownDisplayItem(value).countdown.cardColor, "App card colors do not change widgets or Watch snapshots")
+    }
     func testRecordMergeIsCommutativeAndDeletionDoesNotResurrect() {
         let a = CountdownRecord(entry("2026-10-14"), now: date("2026-01-01"))
         var b = a; b.deleted = true; b.countdown = nil; b.updatedAt = date("2026-01-02")

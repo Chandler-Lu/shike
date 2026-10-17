@@ -1,4 +1,5 @@
 import SwiftUI
+import ShikeCore
 
 enum Notebook {
     static let blue = Color(red: 49/255, green: 89/255, blue: 199/255)
@@ -11,6 +12,45 @@ enum Notebook {
     static var accent: Color { Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.57, green: 0.70, blue: 1, alpha: 1) : UIColor(red: 49/255, green: 89/255, blue: 199/255, alpha: 1) }) }
     static func handwriting(_ size: CGFloat, relativeTo style: Font.TextStyle = .title2) -> Font {
         .custom("LXGWWenKai-Regular", size: size, relativeTo: style)
+    }
+}
+
+extension CountdownCardColor {
+    var paperFill: Color {
+        guard self != .paper else { return Notebook.paper }
+        let light: UInt32, dark: UInt32
+        switch self {
+        case .paper: return Notebook.paper
+        case .cream: (light, dark) = (0xF6EDCA, 0x332E22)
+        case .peach: (light, dark) = (0xF4E2DF, 0x34272C)
+        case .sage: (light, dark) = (0xE4ECDD, 0x273128)
+        case .sky: (light, dark) = (0xDFE9F1, 0x23303B)
+        case .lilac: (light, dark) = (0xE9E2F1, 0x2D293B)
+        }
+        return Self.adaptiveColor(light: light, dark: dark)
+    }
+
+    /// Muted ink paired with the paper, shared by the count and its small labels.
+    var countInk: Color {
+        let light: UInt32, dark: UInt32
+        switch self {
+        case .paper: (light, dark) = (0x4B5D73, 0xC5CED7)
+        case .cream: (light, dark) = (0x6B604A, 0xD5C8AE)
+        case .peach: (light, dark) = (0x765D60, 0xD9BEC1)
+        case .sage: (light, dark) = (0x536B59, 0xBBD0BE)
+        case .sky: (light, dark) = (0x50677C, 0xBCD0E0)
+        case .lilac: (light, dark) = (0x685E78, 0xCBC2DB)
+        }
+        return Self.adaptiveColor(light: light, dark: dark)
+    }
+
+    private static func adaptiveColor(light: UInt32, dark: UInt32) -> Color {
+        return Color(uiColor: UIColor { traits in
+            let hex = traits.userInterfaceStyle == .dark ? dark : light
+            return UIColor(red: CGFloat((hex >> 16) & 255) / 255,
+                           green: CGFloat((hex >> 8) & 255) / 255,
+                           blue: CGFloat(hex & 255) / 255, alpha: 1)
+        })
     }
 }
 
