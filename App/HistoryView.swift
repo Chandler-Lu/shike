@@ -207,6 +207,8 @@ struct SessionDetailView: View {
                     .padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity)
             }
         }.navigationTitle("这一页安排").navigationBarTitleDisplayMode(.inline)
+            .scrollToExtractedResults(controller)
+            .importSuccessFeedback(controller)
             .onDisappear {
                 // Deleting the selected record must not recreate it on pane dismissal.
                 if (try? controller.environment.store?.all().contains { $0.id == controller.session.id }) == true {

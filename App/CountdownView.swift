@@ -589,7 +589,9 @@ struct CountdownDetail: View {
                                 catch { self.error = error.localizedDescription }
                             } label: { Label("导出卡片图片", systemImage: "square.and.arrow.up") }
                                 .buttonStyle(InkButtonStyle(prominent: false)).accessibilityIdentifier("exportCountdownImage")
-                            Button("删除倒数日", role: .destructive) { deleting = true }.frame(minHeight: 44).accessibilityIdentifier("deleteCountdown")
+                            Button("删除倒数日", role: .destructive) { deleting = true }
+                                .buttonStyle(.plain).foregroundStyle(.red)
+                                .frame(minHeight: 44).accessibilityIdentifier("deleteCountdown")
                             if let error { NoteMessage(text: error, isError: true) }
                         }.padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity)
                     }

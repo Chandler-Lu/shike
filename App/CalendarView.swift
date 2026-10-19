@@ -639,13 +639,9 @@ private struct CalendarEventDetail: View {
                     if let information { NoteMessage(text: information).accessibilityIdentifier("calendarConversionStatus") }
                     if let error { NoteMessage(text: error, isError: true) }
                     if canDelete {
-                        Button(role: .destructive) { requestDeletion() } label: {
-                            Label("删除日程", systemImage: "trash")
-                                .font(.body.weight(.semibold)).foregroundStyle(Notebook.red)
-                                .padding(.vertical, 8).frame(maxWidth: .infinity, minHeight: 48)
-                                .background(Notebook.paper, in: RoundedRectangle(cornerRadius: 13))
-                                .overlay(PencilBorder().stroke(Notebook.red.opacity(0.55), lineWidth: 1.3))
-                        }.buttonStyle(.plain).accessibilityIdentifier("deleteCalendarEvent")
+                        Button("删除日程", role: .destructive) { requestDeletion() }
+                            .buttonStyle(.plain).foregroundStyle(.red)
+                            .frame(minHeight: 44).accessibilityIdentifier("deleteCalendarEvent")
                     }
                 }.padding(22).disabled(closingAfterDelete)
             } }.navigationTitle("日程详情").navigationBarTitleDisplayMode(.inline)

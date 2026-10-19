@@ -136,6 +136,8 @@ private struct ModelSessionResult: View {
                 ImportFlowView(controller: controller, calendars: controller.environment.calendars)
                     .padding(22).frame(maxWidth: 680).frame(maxWidth: .infinity)
             } }.navigationTitle(controller.session.planning == nil ? "日程结果" : "安排结果").navigationBarTitleDisplayMode(.inline)
+                .scrollToExtractedResults(controller)
+                .importSuccessFeedback(controller)
                 .toolbar { ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } } }
                 .onAppear { if controller.session.planning != nil { controller.showsPlanning = true } }
         }.tint(Notebook.accent)

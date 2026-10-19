@@ -1,7 +1,34 @@
 import SwiftUI
 import ShikeCore
 
+private enum ImportResultsAnchor: Hashable {
+    case summary(UUID)
+}
+
+extension View {
+    func scrollToExtractedResults(_ controller: ImportController) -> some View {
+        modifier(ExtractedResultsScrolling(controller: controller))
+    }
+}
+
+private struct ExtractedResultsScrolling: ViewModifier {
+    @ObservedObject var controller: ImportController
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        ScrollViewReader { scroll in
+            content.onChange(of: controller.extractionSuccessID) { _, successID in
+                guard successID != nil, !controller.showsPlanning, !controller.session.drafts.isEmpty else { return }
+                withAnimation(reduceMotion ? nil : .easeInOut(duration: 0.35)) {
+                    scroll.scrollTo(ImportResultsAnchor.summary(controller.session.id), anchor: .top)
+                }
+            }
+        }
+    }
+}
+
 struct ImportFlowView: View {
+    @Environment(\.colorScheme) private var colorScheme
     @Environment(\.workspaceWidth) private var workspaceWidth
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @ObservedObject var controller: ImportController
@@ -20,6 +47,7 @@ struct ImportFlowView: View {
     @State private var batchCalendar = ""
     @FocusState private var textFocused: Bool
     @ScaledMetric(relativeTo: .body) private var saveButtonHeight: CGFloat = 58
+    @ScaledMetric(relativeTo: .title2) private var draftTitleLineHeight: CGFloat = 28
 
     var body: some View {
         let wide = WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) && !isExtension && !isPlanningContent
@@ -140,10 +168,10 @@ struct ImportFlowView: View {
                 let summaryLayout = dynamicTypeSize.isAccessibilitySize
                     ? AnyLayout(VStackLayout(alignment: .leading, spacing: 6)) : AnyLayout(HStackLayout())
                 summaryLayout {
-                    Text("整理好了").font(Notebook.handwriting(27))
+                    Text("整理好了").font(Notebook.handwriting(27)).accessibilityIdentifier("importResultsHeading")
                     if !dynamicTypeSize.isAccessibilitySize { Spacer() }
                     Text("\(controller.session.drafts.count) 个日程").font(.subheadline).foregroundStyle(Notebook.secondaryInk)
-                }.padding(.top, 5)
+                }.padding(.top, 5).id(ImportResultsAnchor.summary(controller.session.id))
 
                 if !calendars.authorized {
                     PaperCard {
@@ -207,10 +235,14 @@ struct ImportFlowView: View {
                     }.buttonStyle(InkButtonStyle()).disabled(controller.isBusy || !calendars.authorized || calendars.calendars.isEmpty)
                         .accessibilityIdentifier(isExtension ? "share-saveEvents" : (isPlanningContent ? "planning-saveEvents" : "saveEvents"))
                     }
-                } else if let message = controller.destinationCompletionMessage {
+                }
+                if let message = controller.destinationCompletionMessage {
                     HStack { Image(systemName: "checkmark.seal"); Text(message) }
-                        .font(Notebook.handwriting(18)).foregroundStyle(Notebook.ink).padding(.vertical, 8)
+                        .font(Notebook.handwriting(18)).foregroundStyle(Notebook.ink)
+                        .padding(14).frame(maxWidth: .infinity, alignment: .leading)
+                        .background(Notebook.green.opacity(0.24), in: RoundedRectangle(cornerRadius: 13))
                         .accessibilityIdentifier("destinationCompletion")
+                        .importSuccessHighlight()
                 }
             }
             else if wide {
@@ -229,11 +261,13 @@ struct ImportFlowView: View {
             DraftEditor(draft: draft, calendars: calendars) { changed in try controller.applyEdit(changed, expected: draft) }
                 .presentationDetents([.large]).workspaceSheet()
         }
-        .sheet(isPresented: Binding(get: { controller.review != nil && (isPlanningContent || !controller.showsPlanning) }, set: { if !$0 { controller.cancelReview() } })) {
+        .sheet(isPresented: Binding(get: { controller.review != nil && (isPlanningContent || !controller.showsPlanning) }, set: { if !$0 { controller.cancelReview() } }), onDismiss: { controller.reviewSheetPresented = false }) {
             GuidedReviewView(controller: controller).presentationDetents([.large]).workspaceSheet()
+                .onAppear { controller.reviewSheetPresented = true }
         }
-        .sheet(isPresented: Binding(get: { controller.countdownReview != nil && (isPlanningContent || !controller.showsPlanning) }, set: { if !$0 { controller.cancelCountdownReview() } })) {
+        .sheet(isPresented: Binding(get: { controller.countdownReview != nil && (isPlanningContent || !controller.showsPlanning) }, set: { if !$0 { controller.cancelCountdownReview() } }), onDismiss: { controller.reviewSheetPresented = false }) {
             CountdownConversionReview(controller: controller).workspaceSheet()
+                .onAppear { controller.reviewSheetPresented = true }
         }
         .sheet(item: Binding(get: { (isPlanningContent || !controller.showsPlanning) ? controller.consentRequest : nil }, set: { if $0 == nil && controller.consentRequest != nil { controller.declineExtraction() } })) { scope in
             ExtractionConsentView(scope: scope, allow: controller.allowExtraction, cancel: controller.declineExtraction)
@@ -272,55 +306,106 @@ struct ImportFlowView: View {
     private func draftRow(_ binding: Binding<EventDraft>) -> some View {
         let draft = binding.wrappedValue
         let calendar = calendars.calendars.first { $0.id == draft.calendarID }
-        return PaperCard(tint: draft.isSaved ? Notebook.green.opacity(0.12) : Notebook.paper) {
+        let issues = draft.isSaved ? [] : controller.saveIssues(draft)
+        let titleControlOffset = max(0, (draftTitleLineHeight + 14 - 44) / 2)
+        let prefix = isExtension ? "share-" : (isPlanningContent ? "planning-" : "")
+        let calendarLabel = HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Circle().fill(calendar?.color ?? Notebook.ink.opacity(0.3)).frame(width: 7, height: 7)
+                .accessibilityHidden(true)
+            Text(calendar?.title ?? "请选择日历")
+        }.font(.caption).fixedSize(horizontal: false, vertical: true)
+        let categoryLabel = Text("类别：\(draft.category?.title ?? "未分类")")
+            .font(.caption).foregroundStyle(Notebook.secondaryInk)
+            .fixedSize(horizontal: false, vertical: true)
+
+        return PaperCard(tint: draft.isSaved ? Notebook.green.opacity(0.12) : Notebook.paper, contentPadding: 0) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .top, spacing: 9) {
-                    if draft.isSaved && isExtension {
-                        Image(systemName: "checkmark.circle.fill").foregroundStyle(Notebook.accent).padding(.top, 5)
-                    } else {
-                        Button { binding.wrappedValue.selected.toggle() } label: {
-                            Image(systemName: draft.selected ? "checkmark.square" : "square").font(.title3)
-                                .foregroundStyle(Notebook.accent).frame(width: 44, height: 44)
-                        }.accessibilityLabel(draft.selected ? "取消选择 \(draft.title)" : "选择 \(draft.title)")
-                    }
+                HStack(alignment: .top, spacing: 4) {
                     Button {
                         editing = controller.prepareEdit(draft)
                     } label: {
-                        HStack(alignment: .top, spacing: 9) {
-                            VStack(alignment: .leading, spacing: 7) {
-                                Text(draft.title.isEmpty ? "未命名日程" : draft.title).font(Notebook.handwriting(23))
-                                Text(EventFormatting.schedule(draft)).font(.subheadline).foregroundStyle(Notebook.secondaryInk)
-                            }.frame(maxWidth: .infinity, alignment: .leading)
-                            Image(systemName: "pencil").foregroundStyle(Notebook.ink.opacity(0.55)).padding(.top, 5).accessibilityHidden(true)
-                        }.contentShape(Rectangle())
-                    }.buttonStyle(.plain).accessibilityIdentifier("\(isExtension ? "share-" : (isPlanningContent ? "planning-" : ""))editEvent-\(draft.title)")
+                        VStack(alignment: .leading, spacing: 7) {
+                            Text(draft.title.isEmpty ? "未命名日程" : draft.title)
+                                .font(Notebook.handwriting(23)).padding(.vertical, 7)
+                            Text(EventFormatting.schedule(draft))
+                                .font(.subheadline).foregroundStyle(Notebook.secondaryInk)
+                        }.multilineTextAlignment(.leading).fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
+                    }.buttonStyle(.plain).accessibilityIdentifier("\(prefix)editEvent-\(draft.title)")
                         .accessibilityValue("\(draft.category?.title ?? "未分类")，日历：\(calendar?.title ?? "未选择")")
+                    Menu {
+                        Button("修改") { editing = controller.prepareEdit(draft) }
+                        if !draft.isSaved {
+                            Button("移除草稿", role: .destructive) { controller.session.drafts.removeAll { $0.id == draft.id } }
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis").font(.system(size: 20))
+                            .frame(width: 44, height: 44).contentShape(Rectangle())
+                    }.accessibilityLabel("日程操作")
+                        .accessibilityIdentifier("\(prefix)eventActions-\(draft.id)")
+                        .padding(.top, titleControlOffset)
                 }
                 if !draft.location.isEmpty {
-                    Label(draft.location, systemImage: "mappin.and.ellipse").font(.subheadline).foregroundStyle(Notebook.secondaryInk)
+                    Text("地点：\(draft.location)").font(.subheadline).foregroundStyle(Notebook.secondaryInk)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                HStack(spacing: 6) {
-                    Circle().fill(calendar?.color ?? Notebook.ink.opacity(0.3)).frame(width: 7, height: 7)
-                    Text(calendar?.title ?? "请选择日历").font(.caption)
-                    if let category = draft.category {
-                        Text(category.title).font(.caption).foregroundStyle(Notebook.secondaryInk)
-                    }
-                    Spacer()
-                    if draft.isSaved { Text("已加入").font(.caption).foregroundStyle(Notebook.accent) }
-                    else {
-                        Menu {
-                            Button("修改") { editing = controller.prepareEdit(draft) }
-                            Button("移除草稿", role: .destructive) { controller.session.drafts.removeAll { $0.id == draft.id } }
-                        } label: { Image(systemName: "ellipsis").frame(width: 44, height: 30) }.accessibilityLabel("日程操作")
+                Rectangle().fill(Notebook.ink.opacity(0.12)).frame(height: 1).accessibilityHidden(true)
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .firstTextBaseline, spacing: 12) {
+                        calendarLabel
+                        categoryLabel
+                    }.fixedSize(horizontal: true, vertical: false)
+                    VStack(alignment: .leading, spacing: 6) {
+                        calendarLabel
+                        categoryLabel
                     }
                 }
-                if !draft.isSaved && !controller.saveIssues(draft).isEmpty {
-                    Text(controller.saveIssues(draft).joined(separator: " · "))
-                        .font(.caption).padding(.horizontal, 8).padding(.vertical, 6)
+                if draft.isSaved { Text("已加入").font(.caption).foregroundStyle(Notebook.accent) }
+                if !issues.isEmpty {
+                    VStack(alignment: .leading, spacing: 6) {
+                        ForEach(Array(issues.enumerated()), id: \.offset) { _, issue in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Image(systemName: "exclamationmark.triangle").accessibilityHidden(true)
+                                Text(issue).fixedSize(horizontal: false, vertical: true)
+                            }
+                        }
+                    }.font(.caption).padding(8).frame(maxWidth: .infinity, alignment: .leading)
                         .background(Notebook.yellow.opacity(0.32), in: RoundedRectangle(cornerRadius: 4))
                 }
-                if let error = draft.saveError { Text(error).font(.caption).foregroundStyle(Notebook.red) }
-            }
+                if let error = draft.saveError {
+                    Text(error).font(.caption).foregroundStyle(Notebook.red)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }.frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12).padding(.leading, 56)
+                // An overlay inherits the content height without imposing a fixed card height.
+                .overlay(alignment: .leading) {
+                    let completed = draft.isSaved && isExtension
+                    let selection = VStack(spacing: 0) {
+                        Image(systemName: completed ? "checkmark.circle.fill" : (draft.selected ? "checkmark.square" : "square"))
+                            .font(.system(size: 22)).foregroundStyle(Notebook.accent).frame(width: 44, height: 44)
+                        Spacer(minLength: 0)
+                    }.padding(.top, 12 + titleControlOffset).frame(width: 56).frame(maxHeight: .infinity)
+                        .background {
+                            Notebook.paper.overlay {
+                                Notebook.ink.opacity(draft.selected || completed ? (colorScheme == .dark ? 0.08 : 0.05) : 0)
+                            }
+                        }
+                        .overlay(alignment: .trailing) {
+                            Rectangle().fill(Notebook.ink.opacity(0.12)).frame(width: 1).accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
+                    if completed {
+                        selection.accessibilityElement(children: .ignore).accessibilityLabel("已加入日历")
+                    } else {
+                        Button { binding.wrappedValue.selected.toggle() } label: { selection }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(draft.selected ? "取消选择 \(draft.title)" : "选择 \(draft.title)")
+                            .accessibilityValue(draft.selected ? "已选择" : "未选择")
+                            .accessibilitySortPriority(1)
+                    }
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 13))
         }.disabled(controller.isBusy)
     }
 }
@@ -328,34 +413,42 @@ struct ImportFlowView: View {
 private struct CountdownConversionReview: View {
     @ObservedObject var controller: ImportController
     @State private var error: String?
+
+    private var title: String {
+        guard let review = controller.countdownReview, controller.countdownReviewDraft != nil else { return "加入倒数日" }
+        return "核对日期 \(review.completedCount + 1) / \(review.completedCount + review.pendingIDs.count)"
+    }
+
     var body: some View {
-        if let draft = controller.countdownReviewDraft {
-            CountdownConversionDateEditor(draft: draft, confirm: controller.confirmCountdownReview, cancel: controller.cancelCountdownReview)
-                .id(draft.id)
-        } else {
-            NavigationStack {
-                ZStack { PaperBackground(); VStack(spacing: 20) {
-                    Text("日子已核对，准备加入倒数日。")
-                    if let error = error ?? controller.errorMessage { NoteMessage(text: error, isError: true) }
-                    Button("加入倒数日") {
-                        do { try controller.finishCountdownReview() } catch { self.error = error.localizedDescription }
-                    }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("retrySaveCountdowns")
-                }.padding(22) }.navigationTitle("加入倒数日")
-                    .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消", action: controller.cancelCountdownReview) } }
-            }
-        }
+        NavigationStack {
+            ZStack {
+                PaperBackground()
+                ReviewPageContainer(pageID: controller.countdownReviewDraft?.id.uuidString ?? "remaining") {
+                    if let draft = controller.countdownReviewDraft {
+                        CountdownConversionDateEditor(draft: draft, confirm: controller.confirmCountdownReview)
+                    } else {
+                        VStack(spacing: 20) {
+                            Text("日子已核对，准备加入倒数日。")
+                            if let error = error ?? controller.errorMessage { NoteMessage(text: error, isError: true) }
+                            Button("加入倒数日") {
+                                do { try controller.finishCountdownReview() } catch { self.error = error.localizedDescription }
+                            }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("retrySaveCountdowns")
+                        }.padding(22)
+                    }
+                }
+            }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("取消", action: controller.cancelCountdownReview) } }
+        }.foregroundStyle(Notebook.ink).tint(Notebook.accent)
     }
 }
 
 private struct CountdownConversionDateEditor: View {
     @State var draft: EventDraft
     let confirm: (EventDraft) throws -> Void
-    let cancel: () -> Void
     @State private var error: String?
     @FocusState private var focused: Bool
     var body: some View {
-        NavigationStack {
-            ZStack { PaperBackground(); ScrollView {
+        ScrollView {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("核对要记住的日子").font(Notebook.handwriting(26))
                     TextField("日子名称", text: $draft.title, axis: .vertical).focused($focused)
@@ -382,12 +475,8 @@ private struct CountdownConversionDateEditor: View {
                         do { try confirm(draft) } catch { self.error = error.localizedDescription }
                     }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("confirmConversionDate")
                 }.padding(22)
-            } }.navigationTitle("加入倒数日").navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .cancellationAction) { Button("取消", action: cancel) }
-                    ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { focused = false } }
-                }
-        }.foregroundStyle(Notebook.ink).tint(Notebook.accent)
+        }.scrollDismissesKeyboard(.interactively)
+            .toolbar { ToolbarItemGroup(placement: .keyboard) { Spacer(); Button("收起键盘") { focused = false } } }
     }
 }
 
@@ -395,21 +484,25 @@ private struct GuidedReviewView: View {
     @ObservedObject var controller: ImportController
     @State private var errorMessage: String?
 
+    private var title: String {
+        guard let review = controller.review, controller.reviewDraft != nil else { return "完成核对" }
+        return "核对 \(review.completedCount + 1) / \(review.completedCount + review.pendingIDs.count)"
+    }
+
     var body: some View {
-        if let progress = controller.review {
-            if let draft = controller.reviewDraft {
-                DraftEditor(draft: draft, calendars: controller.environment.calendars,
-                            reviewStep: DraftReviewStep(number: progress.completedCount + 1,
-                                                        total: progress.completedCount + progress.pendingIDs.count,
-                                                        saveCount: controller.reviewSaveCount,
-                                                        isLast: progress.pendingIDs.count == 1,
-                                                        skip: controller.skipReview, cancel: controller.cancelReview),
-                            onSave: controller.confirmReview)
-                    .id(draft.id)
-            } else {
-                NavigationStack {
-                    ZStack {
-                        PaperBackground()
+        NavigationStack {
+            ZStack {
+                PaperBackground()
+                ReviewPageContainer(pageID: controller.reviewDraft?.id.uuidString ?? "remaining") {
+                    if let progress = controller.review, let draft = controller.reviewDraft {
+                        DraftEditor(draft: draft, calendars: controller.environment.calendars,
+                                    reviewStep: DraftReviewStep(number: progress.completedCount + 1,
+                                                                total: progress.completedCount + progress.pendingIDs.count,
+                                                                saveCount: controller.reviewSaveCount,
+                                                                isLast: progress.pendingIDs.count == 1,
+                                                                skip: controller.skipReview, cancel: controller.cancelReview),
+                                    onSave: controller.confirmReview)
+                    } else if controller.review != nil {
                         ScrollView {
                             VStack(alignment: .leading, spacing: 20) {
                                 MarginTitle(title: "剩下的安排，准备好了", subtitle: "暂不加入的日程保留在草稿中。")
@@ -420,15 +513,15 @@ private struct GuidedReviewView: View {
                                 }.buttonStyle(InkButtonStyle()).accessibilityIdentifier("reviewSaveRemaining")
                             }.padding(22)
                         }
-                    }.navigationTitle("完成核对").navigationBarTitleDisplayMode(.inline)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("退出核对") { controller.cancelReview() }.accessibilityIdentifier("exitReview")
-                            }
-                        }
-                }.tint(Notebook.accent)
-            }
-        }
+                    }
+                }
+            }.navigationTitle(title).navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("退出核对") { controller.cancelReview() }.accessibilityIdentifier("exitReview")
+                    }
+                }
+        }.tint(Notebook.accent)
     }
 }
 

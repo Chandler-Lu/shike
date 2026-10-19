@@ -237,6 +237,8 @@ struct HomeView: View {
                     .frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively)
         }.foregroundStyle(Notebook.ink)
+            .scrollToExtractedResults(controller)
+            .importSuccessFeedback(controller)
             .overlay { if dropTargeted { RoundedRectangle(cornerRadius: 20).strokeBorder(Notebook.accent, style: StrokeStyle(lineWidth: 3, dash: [8])).padding(8).allowsHitTesting(false) } }
             .onDrop(of: [.fileURL, .image, .plainText], isTargeted: $dropTargeted) { providers in
                 guard !controller.isBusy, !inputBusy else { return false }

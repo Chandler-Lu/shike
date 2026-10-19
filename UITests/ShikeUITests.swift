@@ -164,7 +164,8 @@ final class ShikeUITests: XCTestCase {
         XCTAssertTrue(event.waitForExistence(timeout: 5))
         event.tap()
         let remove = app.buttons["deleteCountdown"]
-        XCTAssertTrue(remove.waitForExistence(timeout: 5)); revealForReview(remove, app: app); remove.tap()
+        XCTAssertTrue(remove.waitForExistence(timeout: 5)); revealForReview(remove, app: app)
+        capture("countdown-delete-red", app: app); remove.tap()
         app.alerts.buttons["删除"].tap()
         XCTAssertTrue(app.buttons["calendarFilters"].waitForExistence(timeout: 5))
         XCTAssertFalse(event.exists)
@@ -489,7 +490,7 @@ final class ShikeUITests: XCTestCase {
         revealForReview(plan, app: app); plan.tap()
         XCTAssertTrue(event.waitForExistence(timeout: 5))
         let save = app.buttons["planning-saveEvents"]; revealForReview(save, app: app); save.tap()
-        XCTAssertTrue(app.staticTexts["已将 1 个日程加入日历。"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["全部日程已加入日历。"].waitForExistence(timeout: 8))
         app.buttons["closePlanning"].tap()
         app.tabBars.buttons["日历"].tap()
         XCTAssertTrue(app.descendants(matching: .any)["calendarTimeline"].firstMatch.waitForExistence(timeout: 8))
@@ -693,7 +694,7 @@ final class ShikeUITests: XCTestCase {
         XCTAssertTrue(app.buttons["confirmReview"].waitForExistence(timeout: 5))
         XCTAssertEqual(app.textFields["eventTitle"].value as? String, "和小林喝咖啡")
         app.buttons["confirmReview"].tap()
-        XCTAssertTrue(app.staticTexts["已将 2 个日程加入日历。"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["全部日程已加入日历。"].waitForExistence(timeout: 8))
     }
 
     func testGuidedReviewSkipThenExplicitlySaveRemaining() {
@@ -705,7 +706,7 @@ final class ShikeUITests: XCTestCase {
         XCTAssertEqual(save.label, "加入 1 个日程")
         capture("guided-review-skipped", app: app)
         save.tap()
-        XCTAssertTrue(app.staticTexts["已将 1 个日程加入日历。"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["已加入日历 1 个。"].waitForExistence(timeout: 8))
     }
 
     func testGuidedReviewMultipleAndMissingFields() {
@@ -716,8 +717,11 @@ final class ShikeUITests: XCTestCase {
         openGuidedReview(app)
         XCTAssertTrue(app.navigationBars["核对 1 / 2"].exists)
         XCTAssertEqual(app.buttons["confirmReview"].label, "确认并继续")
-        app.buttons["confirmReview"].tap()
+        let navigationFrame = app.navigationBars["核对 1 / 2"].frame
+        app.buttons["confirmReview"].doubleTap()
         XCTAssertTrue(app.navigationBars["核对 2 / 2"].waitForExistence(timeout: 5))
+        XCTAssertFalse(app.staticTexts["reviewError"].exists, "快速连点不能确认下一页")
+        XCTAssertEqual(app.navigationBars["核对 2 / 2"].frame, navigationFrame, "翻页时导航栏保持稳定")
         app.buttons["confirmReview"].tap()
         XCTAssertTrue(app.staticTexts["reviewError"].exists)
         capture("guided-review-missing", app: app)
@@ -732,7 +736,7 @@ final class ShikeUITests: XCTestCase {
         let calendar = app.descendants(matching: .any)["draftCalendar"]; revealForReview(calendar, app: app); calendar.tap()
         app.buttons["个人日程（测试日历）"].tap()
         app.buttons["confirmReview"].tap()
-        XCTAssertTrue(app.staticTexts["已将 2 个日程加入日历。"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["全部日程已加入日历。"].waitForExistence(timeout: 8))
     }
 
     func testReparseStartsWithoutConfirmation() {
@@ -1006,7 +1010,7 @@ final class ShikeUITests: XCTestCase {
         if !save.isHittable { app.swipeUp() }
         XCTAssertTrue(save.waitForExistence(timeout: 5))
         save.tap()
-        XCTAssertTrue(app.staticTexts["已将 2 个日程加入日历。"].waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["全部日程已加入日历。"].waitForExistence(timeout: 8))
         app.swipeDown()
         if !first.isHittable { app.swipeDown() }
         first.tap()
@@ -1035,9 +1039,10 @@ final class ShikeUITests: XCTestCase {
         capture("settings", app: app)
     }
 
-    func testSystemShareExtensionOCRAndCalendarSave() {
+    func testSystemShareExtensionHandsOffOCRToApp() {
         continueAfterFailure = false
         let app = XCUIApplication()
+        // UI-testing uses a private inbox, so cross-process sharing must use integration mode.
         app.launchArguments = ["-integration-testing", "-share-fixture", "-consent-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
         XCTAssertTrue(app.buttons["shareFixture"].waitForExistence(timeout: 10))
@@ -1049,52 +1054,32 @@ final class ShikeUITests: XCTestCase {
         }
         XCTAssertTrue(activity.waitForExistence(timeout: 8), app.debugDescription)
         activity.tap()
-        let source = app.textViews["share-sourceText"]
-        XCTAssertTrue(source.waitForExistence(timeout: 10))
+        XCTAssertTrue(app.staticTexts["已保存，请打开拾刻计划继续。"].waitForExistence(timeout: 10))
+        XCTAssertFalse(app.textViews["share-sourceText"].exists)
+        capture("share-handoff", app: app)
+        app.buttons["完成"].firstMatch.tap()
+        // The extension stages input; OCR, review and saving now run in the containing app.
+        XCUIDevice.shared.press(.home)
+        app.activate()
+        let allow = app.buttons["allowExtraction"]
+        XCTAssertTrue(allow.waitForExistence(timeout: 20))
+        revealForReview(allow, app: app); allow.tap()
+        let edit = app.buttons["editEvent-产品设计评审"]
+        XCTAssertTrue(edit.waitForExistence(timeout: 10))
+        let source = app.textViews["sourceText"]
         let recognized = NSPredicate(format: "value CONTAINS %@", "评审")
         expectation(for: recognized, evaluatedWith: source)
         waitForExpectations(timeout: 20)
-        capture("share-ocr", app: app)
-        let expand = app.buttons["expand-share-sourceText"]
-        revealForReview(expand, app: app); expand.doubleTap()
-        let expanded = app.textViews["expanded-share-sourceText"]
-        XCTAssertTrue(expanded.waitForExistence(timeout: 5))
-        XCTAssertTrue((expanded.value as? String)?.contains("评审") == true)
-        expanded.tap(); expanded.typeText(" ShareExpandedMarker")
-        app.buttons["collapse-share-sourceText"].tap()
-        XCTAssertTrue(source.waitForExistence(timeout: 5))
-        XCTAssertTrue((source.value as? String)?.contains("ShareExpandedMarker") == true)
-        app.buttons["share-parseEvents"].tap()
-        let allow = app.buttons["allowExtraction"]
-        XCTAssertTrue(allow.waitForExistence(timeout: 5))
-        capture("share-privacy-consent", app: app)
-        revealForReview(app.buttons["declineExtraction"], app: app); app.buttons["declineExtraction"].tap()
-        XCTAssertFalse(app.buttons["share-saveEvents"].exists)
-        app.buttons["share-parseEvents"].tap()
-        XCTAssertTrue(allow.waitForExistence(timeout: 5)); revealForReview(allow, app: app); allow.tap()
-        let save = app.buttons["share-saveEvents"]
-        XCTAssertTrue(save.waitForExistence(timeout: 10))
-        revealForReview(save, app: app)
-        // The hosted share sheet can still be rebounding after XCTest considers it idle.
-        var previousFrame = save.frame
-        var stableSince = Date()
-        let settled = NSPredicate { _, _ in
-            let frame = save.frame
-            if frame != previousFrame { previousFrame = frame; stableSince = Date(); return false }
-            return Date().timeIntervalSince(stableSince) >= 1 && save.isHittable
-        }
-        XCTAssertEqual(XCTWaiter.wait(for: [XCTNSPredicateExpectation(predicate: settled, object: nil)], timeout: 6), .completed)
-        XCTAssertTrue(save.isEnabled, app.debugDescription)
-        save.tap()
-        XCTAssertTrue(app.buttons["confirmReview"].waitForExistence(timeout: 5), app.debugDescription)
-        XCTAssertEqual(app.textFields["eventTitle"].value as? String, "和小林喝咖啡")
-        capture("share-guided-review", app: app)
-        app.buttons["confirmReview"].tap()
-        XCTAssertTrue(app.staticTexts["已将 2 个日程加入日历。"].waitForExistence(timeout: 10), app.debugDescription)
-        capture("share-saved", app: app)
-        app.navigationBars.buttons["完成"].firstMatch.tap()
+        revealForReview(edit, app: app)
+        capture("share-imported-cards", app: app)
+        let selected = app.buttons["取消选择 产品设计评审"]
+        revealForReview(selected, app: app); selected.tap()
+        XCTAssertTrue(app.buttons["选择 产品设计评审"].waitForExistence(timeout: 3))
+        revealForReview(edit, app: app); edit.tap()
+        XCTAssertTrue(app.textFields["eventTitle"].waitForExistence(timeout: 5))
+        app.buttons["finishEditing"].tap()
         app.tabBars.buttons["记录"].tap()
-        XCTAssertTrue(app.staticTexts["2 个日程，2 个已加入日历"].firstMatch.waitForExistence(timeout: 8))
+        XCTAssertTrue(app.staticTexts["2 个日程，0 个已加入日历"].firstMatch.waitForExistence(timeout: 8))
     }
 
     private func capture(_ name: String, app: XCUIApplication) {

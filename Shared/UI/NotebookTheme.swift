@@ -86,9 +86,10 @@ struct PaperBackground: View {
 
 struct PaperCard<Content: View>: View {
     var tint: Color = Notebook.paper
+    var contentPadding: CGFloat = 18
     @ViewBuilder var content: Content
     var body: some View {
-        content.padding(18).frame(maxWidth: .infinity, alignment: .leading)
+        content.padding(contentPadding).frame(maxWidth: .infinity, alignment: .leading)
             .background(tint, in: RoundedRectangle(cornerRadius: 13))
             .overlay(PencilBorder().stroke(Notebook.ink.opacity(0.30), style: StrokeStyle(lineWidth: 1.2, lineCap: .round)))
     }

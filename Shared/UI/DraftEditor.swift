@@ -29,8 +29,18 @@ struct DraftEditor: View {
         return draft.isAllDay ? localCalendar.date(byAdding: .day, value: -1, to: end) ?? end : end
     }
 
-    var body: some View {
-        NavigationStack {
+    @ViewBuilder var body: some View {
+        if reviewStep != nil {
+            editorContent
+        } else {
+            NavigationStack {
+                editorContent
+                    .navigationTitle(calendarCreation ? "新增日程" : draft.isSaved ? "修改日程" : "日程草稿")
+            }.tint(Notebook.accent)
+        }
+    }
+
+    private var editorContent: some View {
             ZStack {
                 PaperBackground()
                 Form {
@@ -127,7 +137,6 @@ struct DraftEditor: View {
                     if reviewStep == nil, let errorMessage { Section { NoteMessage(text: errorMessage, isError: true) }.listRowBackground(Color.clear) }
                 }.scrollContentBackground(.hidden).scrollDismissesKeyboard(.interactively)
             }
-            .navigationTitle(reviewStep.map { "核对 \($0.number) / \($0.total)" } ?? (calendarCreation ? "新增日程" : draft.isSaved ? "修改日程" : "日程草稿"))
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 if let step = reviewStep {
@@ -152,12 +161,10 @@ struct DraftEditor: View {
                 }
             }
             .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(reviewStep == nil ? "取消" : "退出核对") {
-                        if let step = reviewStep { step.cancel() } else { dismiss() }
-                    }.accessibilityIdentifier(reviewStep == nil ? "cancelEditing" : "exitReview")
-                }
                 if reviewStep == nil {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button("取消") { dismiss() }.accessibilityIdentifier("cancelEditing")
+                    }
                     ToolbarItem(placement: .confirmationAction) {
                         Button(calendarCreation ? "加入日历" : draft.isSaved ? "保存修改" : "完成") {
                             do { try onSave(draft); dismiss() } catch { errorMessage = error.localizedDescription }
@@ -169,7 +176,6 @@ struct DraftEditor: View {
                 Button("允许重新保存") { draft.saveAttemptInProgress = false; draft.saveError = nil }
                 Button("取消", role: .cancel) {}
             } message: { Text("如果事件已经存在，重新保存会创建重复日程。") }
-        }.tint(Notebook.accent)
     }
 
 

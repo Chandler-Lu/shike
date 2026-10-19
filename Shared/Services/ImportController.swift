@@ -42,11 +42,28 @@ struct DraftReview {
     var completedCount = 0
 }
 
+struct ImportSaveSuccess: Equatable, Identifiable {
+    enum Destination { case calendar, countdown }
+    let id = UUID()
+    let sessionID: UUID
+    let destination: Destination
+    var title: String { destination == .calendar ? "已加入日历" : "已加入倒数日" }
+}
+
 @MainActor final class ImportController: ObservableObject {
-    @Published var session: ImportSession { didSet { schedulePersistence() } }
+    @Published var session: ImportSession {
+        didSet {
+            if oldValue.id != session.id { saveSuccess = nil; extractionSuccessID = nil }
+            schedulePersistence()
+        }
+    }
     @Published var busyMessage: String?
     @Published var errorMessage: String?
     @Published var information: String?
+    @Published private(set) var saveSuccess: ImportSaveSuccess?
+    @Published private(set) var extractionSuccessID: UUID?
+    // Stays true through the dismissal animation, so feedback starts on the visible page.
+    @Published var reviewSheetPresented = false
     @Published private(set) var review: DraftReview?
     @Published private(set) var countdownReview: DraftReview?
     @Published private(set) var consentRequest: ExtractionConsent?
@@ -187,6 +204,7 @@ struct DraftReview {
             errorMessage = "已有日程保存到日历，请新建一次导入再解析。"; return
         }
         errorMessage = nil; information = nil
+        extractionSuccessID = nil
         do {
             if let scope = try currentConsentScope(), !environment.consent.allows(scope) {
                 consentRequest = scope
@@ -230,6 +248,7 @@ struct DraftReview {
                 session = replacement
                 environment.modelJobs.applySessions(to: environment.store)
                 if replacement.drafts.isEmpty { information = "没有找到明确的日程。可以补充日期、时间和安排后再试。" }
+                else { extractionSuccessID = UUID() }
             case .failure(let error):
                 if error is CancellationError { information = "已取消，原文已保留。" }
                 else { errorMessage = error.localizedDescription }
@@ -344,6 +363,7 @@ struct DraftReview {
     func saveSelected() {
         guard !isBusy, review == nil, countdownReview == nil else { return }
         guard session.drafts.contains(where: { $0.selected && !$0.isSaved }) else { return }
+        saveSuccess = nil
         guard session.planning != nil else { beginSaveSelected(); return }
         busyMessage = "正在检查时间冲突…"
         operation = Task {
@@ -362,13 +382,15 @@ struct DraftReview {
 
     var destinationCompletionMessage: String? {
         let drafts = session.drafts, sources = countdownSourceIdentifiers
-        guard !drafts.isEmpty,
-              drafts.allSatisfy({ $0.isSaved || sources.contains(CountdownConversion.sourceIdentifier(for: $0)) }) else { return nil }
+        guard !drafts.isEmpty else { return nil }
         let calendarCount = drafts.filter(\.isSaved).count
         let countdownCount = drafts.filter { sources.contains(CountdownConversion.sourceIdentifier(for: $0)) }.count
+        guard calendarCount > 0 || countdownCount > 0 else { return nil }
         if calendarCount == drafts.count && countdownCount == drafts.count { return "全部日程已加入日历和倒数日。" }
         if calendarCount == drafts.count && countdownCount == 0 { return "全部日程已加入日历。" }
         if countdownCount == drafts.count && calendarCount == 0 { return "全部日程已加入倒数日。" }
+        if countdownCount == 0 { return "已加入日历 \(calendarCount) 个。" }
+        if calendarCount == 0 { return "已加入倒数日 \(countdownCount) 个。" }
         return "已加入日历 \(calendarCount) 个，倒数日 \(countdownCount) 个。"
     }
 
@@ -381,6 +403,7 @@ struct DraftReview {
         guard !isBusy, review == nil, countdownReview == nil else { return }
         let selected = pendingCountdownDrafts
         guard !selected.isEmpty else { return }
+        saveSuccess = nil
         errorMessage = nil; information = nil
         // Saved calendar events have already been confirmed. Only unsaved drafts need review.
         let pending = selected.filter { !$0.isSaved && ($0.needsReview || (try? CountdownConversion.from($0)) == nil) }.map(\.id)
@@ -434,7 +457,7 @@ struct DraftReview {
             throw ShikeError.message("倒数日已保存，但勾选状态保存失败。已加入的项目不会重复添加。\(error.localizedDescription)")
         }
         session = updated
-        information = "已将 \(entries.count) 个日程加入倒数日。"
+        saveSuccess = ImportSaveSuccess(sessionID: session.id, destination: .countdown)
     }
 
     private func beginSaveSelected() {
@@ -574,7 +597,10 @@ struct DraftReview {
                 await Task.yield()
             }
             let failures = session.drafts.filter { selected.map(\.id).contains($0.id) && !$0.isSaved }.count
-            information = failures == 0 ? "已将 \(successes) 个日程加入日历。" : "已保存 \(successes) 个日程，\(failures) 个未保存，可修改后重试。"
+            information = failures > 0 ? "\(failures) 个日程未保存，可修改后重试。" : nil
+            if successes > 0 && failures == 0 {
+                saveSuccess = ImportSaveSuccess(sessionID: session.id, destination: .calendar)
+            }
         }
     }
 

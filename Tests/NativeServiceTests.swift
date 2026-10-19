@@ -2,13 +2,127 @@ import XCTest
 import UIKit
 import EventKit
 import UniformTypeIdentifiers
+import Combine
 import ShikeCore
 @testable import Shike
 
 final class NativeServiceTests: XCTestCase {
+    @MainActor func testExtractionScrollEventOnlyFollowsFreshNonemptyResults() async throws {
+        let response = #"{"events":[{"title":"测试会议","start":"2030-01-01T10:00:00+08:00","end":"2030-01-01T11:00:00+08:00","allDay":false}]}"#
+        let controller = try planningController(events: [], range: DateInterval(start: .now, duration: 86400),
+                                               timeZone: .current, response: response)
+        controller.session.planning = nil
+        controller.parse(); controller.allowExtraction(); try await waitForOperation(controller)
+        let first = try XCTUnwrap(controller.extractionSuccessID)
+        controller.session.drafts[0].selected.toggle()
+        XCTAssertEqual(controller.extractionSuccessID, first)
+        let restored = ImportController(environment: controller.environment, session: controller.session)
+        XCTAssertNil(restored.extractionSuccessID)
+        controller.parse(); try await waitForOperation(controller)
+        XCTAssertNotEqual(try XCTUnwrap(controller.extractionSuccessID), first, "相同数量的重新提取也应滚动")
+        PlanningNativeTransport.setResponse("invalid response")
+        controller.parse(); try await waitForOperation(controller)
+        XCTAssertNotNil(controller.errorMessage)
+        XCTAssertNil(controller.extractionSuccessID)
+        PlanningNativeTransport.setResponse(#"{"events":[]}"#)
+        controller.parse(); try await waitForOperation(controller)
+        XCTAssertNil(controller.errorMessage)
+        XCTAssertTrue(controller.session.drafts.isEmpty)
+        XCTAssertNil(controller.extractionSuccessID)
+    }
+
+    func testInlineSuccessWaitsForVisibilityAndOnlyHighlightsOneMessageOnce() {
+        var state = ImportSuccessHighlightState()
+        let success = ImportSaveSuccess(sessionID: UUID(), destination: .calendar)
+        let viewport = CGRect(x: 0, y: 100, width: 390, height: 650)
+        state.queue(success)
+        state.begin(frame: CGRect(x: 22, y: 800, width: 346, height: 60), viewport: viewport)
+        XCTAssertNil(state.playing)
+        XCTAssertEqual(state.pending?.id, success.id)
+        state.begin(frame: CGRect(x: 22, y: 730, width: 346, height: 60), viewport: viewport)
+        XCTAssertNil(state.playing, "仅露出一小部分时继续等待")
+        state.begin(frame: CGRect(x: 22, y: 705, width: 346, height: 60), viewport: viewport)
+        XCTAssertEqual(state.playing?.id, success.id, "底部留白进入安全区时，已可读的提示仍应播放")
+        XCTAssertNil(state.pending)
+        state.begin(frame: CGRect(x: 22, y: 120, width: 346, height: 60), viewport: viewport)
+        XCTAssertEqual(state.playing?.id, success.id, "同一次成功只播放一次")
+        state.stop(); state.queue(success)
+        XCTAssertNil(state.pending, "重新进入可视区域不重播已强调的事件")
+    }
+
+    func testInlineSuccessReplacesPendingEventsAndClearsWhenLeaving() {
+        var state = ImportSuccessHighlightState()
+        let sessionID = UUID()
+        let first = ImportSaveSuccess(sessionID: sessionID, destination: .countdown)
+        let second = ImportSaveSuccess(sessionID: sessionID, destination: .countdown)
+        state.queue(first); state.queue(second)
+        let frame = CGRect(x: 0, y: 0, width: 300, height: 80)
+        state.begin(frame: frame, viewport: frame)
+        XCTAssertEqual(state.playing?.id, second.id)
+        state.queue(ImportSaveSuccess(sessionID: sessionID, destination: .calendar))
+        state.clear()
+        state.begin(frame: frame, viewport: frame)
+        XCTAssertNil(state.pending); XCTAssertNil(state.playing)
+    }
+
+    @MainActor func testSaveSuccessEventsAreFreshOnlyForCompletedWritesAndNeverRestored() async throws {
+        let store = try SessionStore(inMemory: true)
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: store, countdowns: CountdownStore(inMemory: true))
+        var session = ImportSession(); session.text = "加入成功反馈"
+        session.drafts = [reviewEvent("第一次", needsReview: false), reviewEvent("第二次", needsReview: false)]
+        session.drafts[1].selected = false
+        let controller = ImportController(environment: environment, session: session)
+        XCTAssertNil(controller.saveSuccess)
+        controller.addSelectedCountdowns()
+        let first = try XCTUnwrap(controller.saveSuccess)
+        XCTAssertEqual(first.destination, .countdown)
+        XCTAssertNil(controller.information)
+        XCTAssertEqual(controller.destinationCompletionMessage, "已加入倒数日 1 个。")
+        XCTAssertEqual(first.sessionID, session.id)
+        controller.session.drafts[0].selected = true
+        controller.addSelectedCountdowns()
+        XCTAssertEqual(controller.saveSuccess?.id, first.id, "重复加入不能生成新的成功事件")
+        controller.session.drafts[1].selected = true
+        controller.addSelectedCountdowns()
+        XCTAssertNotEqual(controller.saveSuccess?.id, first.id, "相同位置、相同数量也必须独立反馈")
+        controller.session.drafts[1].selected = true
+        controller.saveSelected(); try await waitForOperation(controller)
+        XCTAssertEqual(controller.saveSuccess?.destination, .calendar)
+        XCTAssertEqual(controller.session.savedCount, 2)
+        XCTAssertNil(controller.information)
+        let restored = ImportController(environment: environment, session: try XCTUnwrap(store.all().first))
+        XCTAssertNil(restored.saveSuccess, "历史记录不恢复一次性动效")
+        controller.startNew()
+        XCTAssertNil(controller.saveSuccess)
+    }
+
+    @MainActor func testPartialCalendarSaveDoesNotEmitSuccessFeedback() async throws {
+        let environment = AppEnvironment(preferences: Preferences(defaults: try consentDefaults()), calendars: CalendarService(useDemo: true),
+            store: try SessionStore(inMemory: true), countdowns: CountdownStore(inMemory: true))
+        var session = ImportSession(); session.text = "部分失败"
+        session.drafts = [reviewEvent("成功", needsReview: false), reviewEvent("失败", needsReview: false)]
+        let controller = ImportController(environment: environment, session: session)
+        controller.addSelectedCountdowns()
+        XCTAssertNotNil(controller.saveSuccess)
+        for index in controller.session.drafts.indices { controller.session.drafts[index].selected = true }
+        // Invalidate the second event after the first is committed, exercising a real save error.
+        let observation = NotificationCenter.default.publisher(for: .shikeSessionChanged).sink { _ in
+            if controller.session.savedCount == 1 { controller.session.drafts[1].title = "" }
+        }
+        defer { observation.cancel() }
+        controller.saveSelected(); try await waitForOperation(controller)
+        XCTAssertEqual(controller.session.savedCount, 1)
+        XCTAssertNotNil(controller.session.drafts[1].saveError)
+        XCTAssertEqual(controller.destinationCompletionMessage, "已加入日历 1 个，倒数日 2 个。")
+        XCTAssertEqual(controller.information, "1 个日程未保存，可修改后重试。")
+        XCTAssertNil(controller.saveSuccess)
+    }
+
     @MainActor func testDestinationCompletionCountsEachDestinationWithoutDoubleCountingFinishedDrafts() throws {
         let cases: [(calendar: Set<Int>, countdown: Set<Int>, message: String?)] = [
-            ([], [], nil), ([0], [], nil), ([0], [0], nil),
+            ([], [], nil), ([0], [], "已加入日历 1 个。"), ([], [0], "已加入倒数日 1 个。"),
+            ([0], [0], "已加入日历 1 个，倒数日 1 个。"),
             ([0], [1], "已加入日历 1 个，倒数日 1 个。"),
             ([0, 1], [], "全部日程已加入日历。"),
             ([], [0, 1], "全部日程已加入倒数日。"),
@@ -63,7 +177,7 @@ final class NativeServiceTests: XCTestCase {
         XCTAssertNil(controller.errorMessage); XCTAssertEqual(environment.countdowns.entries.count, 2)
         XCTAssertTrue(controller.session.drafts[0].selected, "跳过的项目仍可加入日历")
         XCTAssertFalse(controller.session.drafts[1].selected)
-        XCTAssertEqual(controller.information, "已将 1 个日程加入倒数日。")
+        XCTAssertNil(controller.information, "成功只在下方汇总，不生成顶部提示")
         XCTAssertTrue(controller.pendingCountdownDrafts.isEmpty)
         let revision = environment.countdowns.revision
         controller.information = nil
@@ -175,11 +289,14 @@ final class NativeServiceTests: XCTestCase {
         let controller = ImportController(environment: environment, session: session)
         controller.addSelectedCountdowns()
         XCTAssertEqual(controller.countdownReviewDraft?.id, pending.id); XCTAssertTrue(environment.countdowns.entries.isEmpty)
+        XCTAssertNil(controller.saveSuccess)
         XCTAssertThrowsError(try controller.confirmCountdownReview(pending))
         controller.cancelCountdownReview(); XCTAssertTrue(environment.countdowns.entries.isEmpty)
+        XCTAssertNil(controller.saveSuccess)
         controller.addSelectedCountdowns(); pending.start = .now
         try controller.confirmCountdownReview(pending)
         XCTAssertNil(controller.countdownReview); XCTAssertEqual(environment.countdowns.entries.count, 2)
+        XCTAssertEqual(controller.saveSuccess?.destination, .countdown)
         XCTAssertEqual(controller.session.drafts[0].eventIdentifier, ready.eventIdentifier)
         XCTAssertTrue(controller.session.drafts.allSatisfy { !$0.selected })
         XCTAssertTrue(controller.session.drafts[1].needsReview, "倒数日日期确认不代表确认日历建议")
@@ -193,6 +310,7 @@ final class NativeServiceTests: XCTestCase {
         controller.addSelectedCountdowns()
         XCTAssertNotNil(controller.errorMessage); XCTAssertTrue(controller.session.drafts[0].selected)
         XCTAssertEqual(controller.session.savedCount, 0); XCTAssertTrue(environment.countdowns.entries.isEmpty)
+        XCTAssertNil(controller.saveSuccess)
     }
     @MainActor func testSearchConfigurationAutosaveAndToggleRetainIndependentCredentials() throws {
         let defaults = try consentDefaults(), preferences = Preferences(defaults: defaults)
@@ -811,7 +929,8 @@ final class NativeServiceTests: XCTestCase {
         try await waitForOperation(restored)
         XCTAssertNil(restored.review)
         XCTAssertEqual(restored.session.savedCount, 4)
-        XCTAssertEqual(restored.information, "已将 3 个日程加入日历。")
+        XCTAssertNil(restored.information)
+        XCTAssertEqual(restored.destinationCompletionMessage, "已加入日历 4 个。")
         XCTAssertEqual(Set(restored.session.drafts.compactMap(\.eventIdentifier)).count, 4)
         XCTAssertFalse(restored.session.drafts[2].isSaved)
     }

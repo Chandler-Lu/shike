@@ -24,6 +24,7 @@
 		17A2B571BF5AC85C2DD4E6CD /* Shared/UI/PrivacyViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D9B1EB9E0BB6C4B2FE43D1A /* Shared/UI/PrivacyViews.swift */; };
 		1856276C13F6EC2199696F4F /* CountdownWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B855AAAF2B3D7890367CD2 /* CountdownWidget.swift */; };
 		18BB3956690E9A38CED769BF /* CountdownWidgetContent.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F6B417D850E3FBFF817EB3D /* CountdownWidgetContent.swift */; };
+		195B1BB9B218C6569B07F7C4 /* ReviewPageContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761B6D80FAF87BF63CF088BA /* ReviewPageContainer.swift */; };
 		1B5269F135A457053F0FF1E5 /* CountdownSnapshotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */; };
 		1E0BF12DFCBA964AEBADC415 /* ItemLoader.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59FE8E7DBF9D7CB54838E7E8 /* ItemLoader.swift */; };
 		200DBEE6E639A72329D8D9C6 /* NewFeatureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1171296EFE85389DE4D40670 /* NewFeatureUITests.swift */; };
@@ -55,6 +56,7 @@
 		4E8593062D013D4ABB084487 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0217491DECBC44F5AE196A36 /* OFL.txt */; };
 		4E86DCFAAE4DF7663679A5DE /* CountdownWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = D7B855AAAF2B3D7890367CD2 /* CountdownWidget.swift */; };
 		4F990F8478958875F6BB147E /* ModelJobViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EE51676F77A4395FCC36076 /* ModelJobViews.swift */; };
+		512212F164E798E8429FF5D4 /* ImportSuccessFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4DEC34B0DB0392625DBA6D7 /* ImportSuccessFeedback.swift */; };
 		52836B8EE218C767CC273D53 /* OCRService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9CD37A6EB9A5AD5678408071 /* OCRService.swift */; };
 		55E27A0084602964CC7F80FF /* NativeServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 71BBEAC131DDD842EF8171AC /* NativeServiceTests.swift */; };
 		5AC938C9D0F673B1A2FE603A /* ImageStaging.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9210D5B422ADC590BAE7E008 /* ImageStaging.swift */; };
@@ -85,6 +87,7 @@
 		7A0E18DC79725F4C51B443EC /* DraftEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 080E1AD9F2C7EE19218372A1 /* DraftEditor.swift */; };
 		7B6A72982D9AE824BB13FE68 /* CountdownSnapshotStorage.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE3FDFAEE5158798B28C39AE /* CountdownSnapshotStorage.swift */; };
 		7BB231C4D8CBA5FE84916B7F /* ShortcutImport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A44B75256946F713AC31E4E7 /* ShortcutImport.swift */; };
+		81AA00A7EBF0645E68C43DAE /* ImportSuccessFeedback.swift in Sources */ = {isa = PBXBuildFile; fileRef = E4DEC34B0DB0392625DBA6D7 /* ImportSuccessFeedback.swift */; };
 		81E31D14B67E5146B07AB310 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 88A8D2E73139AF968E741B1B /* RootView.swift */; };
 		873A1ACC59D38B1BCFD6127D /* CompanionViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = 35C3310553A08C141D9A2DE0 /* CompanionViews.swift */; };
 		8A16A2368D9A62C9F5A66E2F /* ShikeWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08ACA3A8D6923D5233F159B9 /* ShikeWatchApp.swift */; };
@@ -120,6 +123,7 @@
 		B66DF62E5A4D809FA56AA664 /* FileImportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D357D76E9B67D714670FAD42 /* FileImportTests.swift */; };
 		B8F53121C4E33704A086AB1D /* Shared/Resources/PrivacyPolicy.txt in Resources */ = {isa = PBXBuildFile; fileRef = DC596BC5B2AE7837C12CD861 /* Shared/Resources/PrivacyPolicy.txt */; };
 		BCFF0CA465CBF95CA6B27003 /* CountdownView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2939D6B3476533044C1665EF /* CountdownView.swift */; };
+		C7D20EA5B3660BA7D05892ED /* ReviewPageContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 761B6D80FAF87BF63CF088BA /* ReviewPageContainer.swift */; };
 		C7DA600E777F905475C34C20 /* OFL.txt in Resources */ = {isa = PBXBuildFile; fileRef = 0217491DECBC44F5AE196A36 /* OFL.txt */; };
 		C91EC77391E5EE154C759E1C /* ModelJobs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 574783D6FC2230009D5E6A9B /* ModelJobs.swift */; };
 		CB04144C4EFB90757B3D7389 /* DraftEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 080E1AD9F2C7EE19218372A1 /* DraftEditor.swift */; };
@@ -286,6 +290,7 @@
 		6C4AE6E0A18F106276B42CED /* App/CloudSyncFailure.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/CloudSyncFailure.swift; sourceTree = "<group>"; };
 		6F15862AE9A0216CD6D19F63 /* VoiceInput.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = VoiceInput.swift; path = App/VoiceInput.swift; sourceTree = "<group>"; };
 		71BBEAC131DDD842EF8171AC /* NativeServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = NativeServiceTests.swift; path = Tests/NativeServiceTests.swift; sourceTree = "<group>"; };
+		761B6D80FAF87BF63CF088BA /* ReviewPageContainer.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ReviewPageContainer.swift; path = Shared/UI/ReviewPageContainer.swift; sourceTree = "<group>"; };
 		77E9324E10930DCE736ECB13 /* Assets.xcassets */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = App/Assets.xcassets; sourceTree = "<group>"; };
 		864A76AEC80F82752730F173 /* CountdownStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CountdownStore.swift; path = Shared/Services/CountdownStore.swift; sourceTree = "<group>"; };
 		88A8D2E73139AF968E741B1B /* RootView.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = App/RootView.swift; sourceTree = "<group>"; };
@@ -322,6 +327,7 @@
 		D357D76E9B67D714670FAD42 /* FileImportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = FileImportTests.swift; path = Tests/FileImportTests.swift; sourceTree = "<group>"; };
 		D7B855AAAF2B3D7890367CD2 /* CountdownWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = CountdownWidget.swift; path = CountdownWidgets/CountdownWidget.swift; sourceTree = "<group>"; };
 		DC596BC5B2AE7837C12CD861 /* Shared/Resources/PrivacyPolicy.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = Shared/Resources/PrivacyPolicy.txt; sourceTree = "<group>"; };
+		E4DEC34B0DB0392625DBA6D7 /* ImportSuccessFeedback.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ImportSuccessFeedback.swift; path = Shared/UI/ImportSuccessFeedback.swift; sourceTree = "<group>"; };
 		ED79057B549841B05F06A368 /* ImportController.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ImportController.swift; path = Shared/Services/ImportController.swift; sourceTree = "<group>"; };
 		F2E4CDD2DD28AC51D678F4BF /* CalendarView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CalendarView.swift; path = App/CalendarView.swift; sourceTree = "<group>"; };
 		F4177A19018749078D7D0713 /* ModelJobTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = ModelJobTests.swift; path = Tests/ModelJobTests.swift; sourceTree = "<group>"; };
@@ -494,6 +500,8 @@
 				CF1F29FBED89B2764AE5773A /* ShortcutInbox.swift */,
 				93ABF202463487472A4CE403 /* ModelBackgroundProbe.swift */,
 				F4177A19018749078D7D0713 /* ModelJobTests.swift */,
+				E4DEC34B0DB0392625DBA6D7 /* ImportSuccessFeedback.swift */,
+				761B6D80FAF87BF63CF088BA /* ReviewPageContainer.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -958,6 +966,8 @@
 				39F19B9256FA9E7CA41DB4C3 /* PlatformSupport.swift in Sources */,
 				0F716AD2F3D91D45CC75193C /* ModelJobs.swift in Sources */,
 				27825B5F9F61ED0CE21A6FFE /* ShortcutInbox.swift in Sources */,
+				512212F164E798E8429FF5D4 /* ImportSuccessFeedback.swift in Sources */,
+				C7D20EA5B3660BA7D05892ED /* ReviewPageContainer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1021,6 +1031,8 @@
 				4F990F8478958875F6BB147E /* ModelJobViews.swift in Sources */,
 				70FF81CB8383EF960ECB5AB1 /* ShortcutInbox.swift in Sources */,
 				08E6E49EF4C50BE8C98E3744 /* ModelBackgroundProbe.swift in Sources */,
+				81AA00A7EBF0645E68C43DAE /* ImportSuccessFeedback.swift in Sources */,
+				195B1BB9B218C6569B07F7C4 /* ReviewPageContainer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1282,7 +1294,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				APP_BUILD_NUMBER = 13;
+				APP_BUILD_NUMBER = 14;
 				APP_MARKETING_VERSION = 1.2;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
@@ -1449,7 +1461,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Config/ShikeMac.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = "$(APP_BUILD_NUMBER)";
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = V7SF8825HD;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1736,7 +1748,7 @@
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = Config/ShikeMac.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = "$(APP_BUILD_NUMBER)";
 				DERIVE_MACCATALYST_PRODUCT_BUNDLE_IDENTIFIER = NO;
 				DEVELOPMENT_TEAM = V7SF8825HD;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -1781,7 +1793,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
-				APP_BUILD_NUMBER = 13;
+				APP_BUILD_NUMBER = 14;
 				APP_MARKETING_VERSION = 1.2;
 				CLANG_ANALYZER_NONNULL = YES;
 				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;

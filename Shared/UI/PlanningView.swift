@@ -109,7 +109,9 @@ struct PlanningView: View {
                                 }.font(.subheadline).accessibilityIdentifier("planningSources")
                             }
                             if let error = controller.errorMessage { NoteMessage(text: error, isError: true) }
-                            if let info = controller.information { NoteMessage(text: info) }
+                            if let info = controller.information {
+                                NoteMessage(text: info).accessibilityIdentifier("statusMessage")
+                            }
                             if let busy = controller.busyMessage {
                                 HStack {
                                     ProgressView(); Text(busy).font(.subheadline); Spacer()
@@ -159,6 +161,7 @@ struct PlanningView: View {
                 }
             }.foregroundStyle(Notebook.ink)
         }
+                .importSuccessFeedback(controller, planning: true)
                 .navigationTitle("帮我安排").navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .cancellationAction) {
