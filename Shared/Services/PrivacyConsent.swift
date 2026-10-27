@@ -54,6 +54,8 @@ struct ExtractionConsent: Codable, Equatable, Identifiable {
 }
 
 enum AppLegal {
+    static let authorURL = URL(string: "https://www.yeslu.cn")!
+    static let appRegistration = "皖ICP备16003997号-4A"
     static let privacyURL = URL(string: "https://github.com/Chandler-Lu/shike/blob/main/PRIVACY.md")!
     static let supportURL = URL(string: "https://github.com/Chandler-Lu/shike/issues")!
     static let emailURL = URL(string: "mailto:shike@yeslu.cn?subject=Shike%20Support")!

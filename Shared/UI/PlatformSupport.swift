@@ -45,6 +45,7 @@ struct WorkspaceViewport<Content: View>: View {
         GeometryReader { geometry in
             content
                 .environment(\.workspaceWidth, geometry.size.width)
+                .storeCaptureAppearance()
         }
     }
 }

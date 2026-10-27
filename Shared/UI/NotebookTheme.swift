@@ -1,13 +1,62 @@
 import SwiftUI
 import ShikeCore
 
+/// Launch-only styling for real App Store captures. Never enabled in Release.
+enum StoreCaptureStyle {
+    static var isEnabled: Bool {
+        #if DEBUG
+        let arguments = ProcessInfo.processInfo.arguments
+        return ["-ui-testing", "-store-screenshots", "-store-clean-capture"].allSatisfy(arguments.contains)
+        #else
+        return false
+        #endif
+    }
+
+    @MainActor static func configureBars() {
+        #if DEBUG
+        guard isEnabled else { return }
+        let navigation = UINavigationBarAppearance()
+        navigation.configureWithOpaqueBackground()
+        navigation.backgroundColor = .white
+        navigation.shadowColor = .clear
+        let bar = UINavigationBar.appearance()
+        bar.standardAppearance = navigation
+        bar.scrollEdgeAppearance = navigation
+        bar.compactAppearance = navigation
+        bar.compactScrollEdgeAppearance = navigation
+        let tabs = UITabBarAppearance()
+        tabs.configureWithOpaqueBackground()
+        tabs.backgroundColor = .white
+        UITabBar.appearance().standardAppearance = tabs
+        UITabBar.appearance().scrollEdgeAppearance = tabs
+        #endif
+    }
+}
+
+extension View {
+    @ViewBuilder func storeCaptureAppearance() -> some View {
+        if StoreCaptureStyle.isEnabled {
+            if #available(iOS 26.0, *) {
+                self.preferredColorScheme(.light)
+                    .toolbarBackground(.white, for: .navigationBar, .tabBar)
+                    .toolbarBackground(.visible, for: .navigationBar, .tabBar)
+                    .scrollEdgeEffectHidden()
+            } else {
+                self.preferredColorScheme(.light)
+                    .toolbarBackground(.white, for: .navigationBar, .tabBar)
+                    .toolbarBackground(.visible, for: .navigationBar, .tabBar)
+            }
+        } else { self }
+    }
+}
+
 enum Notebook {
     static let blue = Color(red: 49/255, green: 89/255, blue: 199/255)
     static let yellow = Color(red: 246/255, green: 221/255, blue: 117/255)
     static let green = Color(red: 189/255, green: 209/255, blue: 190/255)
     static let red = Color(red: 184/255, green: 68/255, blue: 62/255)
     static var secondaryInk: Color { Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.71, green: 0.76, blue: 0.78, alpha: 1) : UIColor(red: 0.36, green: 0.40, blue: 0.44, alpha: 1) }) }
-    static var paper: Color { Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.14, blue: 0.17, alpha: 1) : UIColor(red: 248/255, green: 249/255, blue: 243/255, alpha: 1) }) }
+    static var paper: Color { StoreCaptureStyle.isEnabled ? .white : Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.11, green: 0.14, blue: 0.17, alpha: 1) : UIColor(red: 248/255, green: 249/255, blue: 243/255, alpha: 1) }) }
     static var ink: Color { Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.91, green: 0.94, blue: 0.89, alpha: 1) : UIColor(red: 40/255, green: 53/255, blue: 66/255, alpha: 1) }) }
     static var accent: Color { Color(uiColor: UIColor { $0.userInterfaceStyle == .dark ? UIColor(red: 0.57, green: 0.70, blue: 1, alpha: 1) : UIColor(red: 49/255, green: 89/255, blue: 199/255, alpha: 1) }) }
     static func handwriting(_ size: CGFloat, relativeTo style: Font.TextStyle = .title2) -> Font {
@@ -56,6 +105,9 @@ extension CountdownCardColor {
 
 struct PencilBorder: Shape {
     func path(in r: CGRect) -> Path {
+        if StoreCaptureStyle.isEnabled {
+            return Path(roundedRect: r.insetBy(dx: 0.6, dy: 0.6), cornerRadius: 13)
+        }
         var p = Path()
         p.move(to: CGPoint(x: r.minX + 13, y: r.minY + 1))
         p.addCurve(to: CGPoint(x: r.maxX - 12, y: r.minY + 2), control1: CGPoint(x: r.width * 0.35, y: r.minY - 1), control2: CGPoint(x: r.width * 0.72, y: r.minY + 3))
@@ -73,13 +125,13 @@ struct PencilBorder: Shape {
 struct PaperBackground: View {
     var body: some View {
         Notebook.paper.overlay {
-            Canvas { context, size in
+            if !StoreCaptureStyle.isEnabled { Canvas { context, size in
                 for y in stride(from: 10.0, to: size.height, by: 24) {
                     for x in stride(from: 14.0, to: size.width, by: 24) {
                         context.fill(Path(ellipseIn: CGRect(x: x, y: y, width: 1.1, height: 1.1)), with: .color(Notebook.ink.opacity(0.10)))
                     }
                 }
-            }.accessibilityHidden(true)
+            }.accessibilityHidden(true) }
         }.ignoresSafeArea()
     }
 }
@@ -91,7 +143,7 @@ struct PaperCard<Content: View>: View {
     var body: some View {
         content.padding(contentPadding).frame(maxWidth: .infinity, alignment: .leading)
             .background(tint, in: RoundedRectangle(cornerRadius: 13))
-            .overlay(PencilBorder().stroke(Notebook.ink.opacity(0.30), style: StrokeStyle(lineWidth: 1.2, lineCap: .round)))
+            .overlay(PencilBorder().stroke(Notebook.ink.opacity(StoreCaptureStyle.isEnabled ? 0.38 : 0.30), style: StrokeStyle(lineWidth: 1.2, lineCap: .round)))
     }
 }
 

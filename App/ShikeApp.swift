@@ -8,6 +8,7 @@ import ShikeCore
     @StateObject private var environment: AppEnvironment
     init() {
         AppIdentity.configureDebugLaunch()
+        StoreCaptureStyle.configureBars()
         #if DEBUG
         if AppIdentity.isUITesting {
             UserDefaults(suiteName: "Shike.UITests")?.removePersistentDomain(forName: "Shike.UITests")
@@ -46,7 +47,7 @@ import ShikeCore
                         NoteMessage(text: error, isError: true)
                     }.padding(28)
                 }
-            } else { RootView(environment: environment).environmentObject(workspace).task { ShikeShortcuts.updateAppShortcutParameters() } }
+            } else { RootView(environment: environment).environmentObject(workspace).storeCaptureAppearance().task { ShikeShortcuts.updateAppShortcutParameters() } }
         }.commands { WorkspaceCommands(workspace: workspace) }
     }
 }

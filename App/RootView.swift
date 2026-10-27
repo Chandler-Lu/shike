@@ -233,7 +233,10 @@ struct HomeView: View {
                                    onVoiceInput: toggleVoiceInput, voiceRecording: voice.recording,
                                    voicePreparing: voice.preparing, voiceFinishing: voice.finishing,
                                    voiceInputEnabled: !controller.isBusy && !isLoadingInput && controller.session.savedCount == 0)
-                }.padding(.horizontal, 22).padding(.bottom, 32).frame(maxWidth: WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) ? 1200 : 680)
+                }.padding(.horizontal, 22)
+                    // Let the results settle below the opaque header in portrait captures.
+                    .padding(.bottom, StoreCaptureStyle.isEnabled && workspaceWidth < 760 && !controller.session.drafts.isEmpty ? 64 : 32)
+                    .frame(maxWidth: WorkspaceLayout.usesColumns(width: workspaceWidth, dynamicTypeSize: dynamicTypeSize) ? 1200 : 680)
                     .frame(maxWidth: .infinity)
             }.scrollDismissesKeyboard(.interactively)
         }.foregroundStyle(Notebook.ink)

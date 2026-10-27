@@ -38,7 +38,7 @@ final class PasteReceiver: UIView {
         config.displayMode = .iconAndLabel
         // UIPasteControl renders its own backdrop; transparent base colors can
         // become an opaque black fill after the system's highlight transition.
-        config.baseBackgroundColor = dark ? UIColor(red: 0.11, green: 0.14, blue: 0.17, alpha: 1) : UIColor(red: 248/255, green: 249/255, blue: 243/255, alpha: 1)
+        config.baseBackgroundColor = StoreCaptureStyle.isEnabled ? .white : (dark ? UIColor(red: 0.11, green: 0.14, blue: 0.17, alpha: 1) : UIColor(red: 248/255, green: 249/255, blue: 243/255, alpha: 1))
         config.baseForegroundColor = dark ? UIColor(red: 0.91, green: 0.94, blue: 0.89, alpha: 1) : UIColor(red: 40/255, green: 53/255, blue: 66/255, alpha: 1)
         let control = UIPasteControl(configuration: config)
         self.control = control

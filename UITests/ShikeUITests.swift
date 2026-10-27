@@ -618,44 +618,123 @@ final class ShikeUITests: XCTestCase {
     }
 
     func testAppStoreScreenshots() {
+        appStoreScreenshots(landscape: false)
+    }
+
+    func testAppStoreWideScreenshots() {
+        appStoreScreenshots(landscape: true)
+    }
+
+    func testAppStoreUnfoldedScreenshots() {
+        // Duo's active inner display is oriented by Device Hub. XCTest's
+        // orientation control addresses the outer display and can reset it.
+        appStoreScreenshots(landscape: nil)
+    }
+
+    func testAuthorHomepageAndRegistration() {
         continueAfterFailure = false
+        XCUIDevice.shared.orientation = .portrait
         let app = XCUIApplication()
-        app.launchArguments = ["-ui-testing", "-seed-example", "-store-screenshots", "-paste-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        // An incomplete capture launch must keep the ordinary paper appearance.
+        app.launchArguments = ["-ui-testing", "-seed-example", "-store-clean-capture",
+                               "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
         app.launch()
         XCTAssertTrue(app.buttons["parseEvents"].waitForExistence(timeout: 10))
+        capture("ordinary-home-incomplete-capture-flags", app: app)
+        storeSection(2, "设置", app: app)
+        let author = app.descendants(matching: .any).matching(identifier: "authorHomepage").firstMatch
+        revealStoreControl(author, app: app)
+        let registration = app.staticTexts["appRegistration"]
+        revealStoreControl(registration, app: app)
+        XCTAssertEqual(registration.label, "皖ICP备16003997号-4A")
+        XCTAssertTrue(author.isHittable)
+        capture("settings-author-registration", app: app)
+        author.tap()
+        let safari = XCUIApplication(bundleIdentifier: "com.apple.mobilesafari")
+        XCTAssertTrue(safari.wait(for: .runningForeground, timeout: 15))
+        capture("author-homepage-browser", app: safari)
+    }
+
+    private func appStoreScreenshots(landscape: Bool?) {
+        continueAfterFailure = false
+        if let landscape { XCUIDevice.shared.orientation = landscape ? .landscapeLeft : .portrait }
+        let app = XCUIApplication()
+        app.launchArguments = ["-ui-testing", "-seed-example", "-store-screenshots", "-paste-fixture", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchArguments.append("-store-clean-capture")
+        app.launch()
+        XCTAssertTrue(app.buttons["parseEvents"].waitForExistence(timeout: 10))
+        if landscape == nil {
+            // Give Duo's import actions breathing room above the screen edge.
+            let start = app.windows.firstMatch.coordinate(withNormalizedOffset: CGVector(dx: 0.35, dy: 0.75))
+            start.press(forDuration: 0.05, thenDragTo: start.withOffset(CGVector(dx: 0, dy: -24)))
+        }
         capture("store-01-import", app: app)
         app.buttons["parseEvents"].tap()
         let first = app.buttons["editEvent-产品设计评审"]
         XCTAssertTrue(first.waitForExistence(timeout: 8))
-        revealForReview(app.buttons["saveEvents"], app: app)
+        revealStoreControl(app.buttons["saveEvents"], app: app)
         capture("store-02-results", app: app)
         app.buttons["saveEvents"].tap()
         XCTAssertTrue(app.buttons["confirmReview"].waitForExistence(timeout: 5))
         capture("store-03-review", app: app)
         app.buttons["exitReview"].tap()
-        revealForReview(first, app: app); first.tap()
+        revealStoreControl(first, app: app); first.tap()
         XCTAssertTrue(app.textFields["eventTitle"].waitForExistence(timeout: 5))
         capture("store-04-editor", app: app)
         app.buttons["取消"].tap()
-        app.tabBars.buttons["设置"].tap()
+        storeSection(2, "设置", app: app)
         capture("store-05-settings", app: app)
         app.launchArguments = ["-ui-testing", "-seed-example", "-planning-fixture", "-calendar-fixture", "-store-screenshots", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
+        app.launchArguments.append("-store-clean-capture")
         app.launch()
         app.buttons["planEvents"].tap(); app.buttons["startPlanning"].tap()
         let option = app.buttons["planningOption-每次 30 分钟，晚上安排"]
         XCTAssertTrue(option.waitForExistence(timeout: 8)); option.tap()
         let proposed = app.buttons["planning-editEvent-读书与笔记"]
-        XCTAssertTrue(proposed.waitForExistence(timeout: 8)); revealForReview(proposed, app: app)
+        XCTAssertTrue(proposed.waitForExistence(timeout: 8)); revealStoreControl(proposed, app: app)
+        if landscape != true {
+            // Phone sheets can leave a hittable button partly behind the bottom edge.
+            let save = app.buttons["planning-saveEvents"]
+            revealStoreControl(save, app: app)
+            let window = app.windows.firstMatch
+            for _ in 0..<4 where save.frame.maxY > window.frame.maxY - 40 {
+                window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.7))
+                    .press(forDuration: 0.05, thenDragTo: window.coordinate(withNormalizedOffset: CGVector(dx: 0.5, dy: 0.5)))
+            }
+            XCTAssertLessThanOrEqual(save.frame.maxY, window.frame.maxY - 40)
+        }
         capture("store-06-planning", app: app)
-        app.buttons["closePlanning"].tap(); app.tabBars.buttons["日历"].tap()
+        app.buttons["closePlanning"].tap(); storeSection(3, "日历", app: app)
         XCTAssertTrue(app.segmentedControls["calendarRange"].waitForExistence(timeout: 8))
         app.segmentedControls["calendarRange"].buttons["7 天"].tap()
         XCTAssertTrue(app.buttons["calendarEvent-demo-0"].waitForExistence(timeout: 8))
         capture("store-07-calendar", app: app)
         app.launchArguments = ["-ui-testing", "-countdown-fixture", "-store-screenshots", "-AppleLanguages", "(zh-Hans)", "-AppleLocale", "zh_CN"]
-        app.launch(); app.tabBars.buttons["倒数日"].tap()
+        app.launchArguments.append("-store-clean-capture")
+        app.launch(); storeSection(4, "倒数日", app: app)
         XCTAssertTrue(app.buttons["addCountdown"].waitForExistence(timeout: 8))
         capture("store-08-countdowns", app: app)
+    }
+
+    private func storeSection(_ id: Int, _ title: String, app: XCUIApplication) {
+        let sidebar = app.buttons["section-\(id)"]
+        if sidebar.isHittable { sidebar.tap() }
+        else if app.tabBars.buttons[title].isHittable { app.tabBars.buttons[title].tap() }
+        else { app.buttons[title].firstMatch.tap() }
+    }
+
+    private func revealStoreControl(_ element: XCUIElement, app: XCUIApplication) {
+        // The application frame may retain Duo's portrait dimensions; its window is current.
+        let window = app.windows.firstMatch
+        for _ in 0..<12 where !element.isHittable {
+            let bounds = window.frame
+            let x = min(max(element.frame.midX - bounds.minX, 30), bounds.width - 30)
+            let origin = window.coordinate(withNormalizedOffset: .zero)
+            let down = element.frame.minY < bounds.midY
+            origin.withOffset(CGVector(dx: x, dy: bounds.height * (down ? 0.35 : 0.7)))
+                .press(forDuration: 0.05, thenDragTo: origin.withOffset(CGVector(dx: x, dy: bounds.height * (down ? 0.7 : 0.35))))
+        }
+        XCTAssertTrue(element.isHittable, app.debugDescription)
     }
 
     private func revealForReview(_ element: XCUIElement, app: XCUIApplication) {
@@ -1084,14 +1163,17 @@ final class ShikeUITests: XCTestCase {
 
     private func capture(_ name: String, app: XCUIApplication) {
         // The accessibility tree can become idle before the system sheet's final frame.
-        if name == "editor" || name == "store-04-editor" {
+        if name == "editor" {
             let settled = NSPredicate { _, _ in app.navigationBars["日程草稿"].frame.minY < 150 }
             let expectation = XCTNSPredicateExpectation(predicate: settled, object: nil)
             XCTAssertEqual(XCTWaiter.wait(for: [expectation], timeout: 5), .completed)
         }
+        if name.hasPrefix("store-") { Thread.sleep(forTimeInterval: 1) }
         let attachment = XCTAttachment(screenshot: app.screenshot())
         attachment.name = name; attachment.lifetime = .keepAlways
         add(attachment)
+        // Host capture reads the active display; XCTest can capture Duo's inactive outer screen.
+        if name.hasPrefix("store-") { Thread.sleep(forTimeInterval: 3) }
     }
 }
 
